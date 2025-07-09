@@ -19,19 +19,19 @@ inline constexpr std::size_t operator"" _uz(unsigned long long const value) noex
 #define uz uz
 #endif
 
-namespace std {
-// The from_range_t fallback is no longer needed as we use preprocessor checks.
+namespace my_ranges {
+    // The from_range_t fallback is no longer needed as we use preprocessor checks.
 
 #ifndef __cpp_lib_ranges_enumerate
     // --- Fallback for C++20/17 ---
     // This is a generator function, not a view.
-    template<ranges::range R>
+    template<::std::ranges::range R>
     auto enumerate(R &&r) {
-        using ValueType = ranges::range_value_t<R>;
-        vector<pair<size_t, ValueType> > result;
+        using ValueType = ::std::ranges::range_value_t<R>;
+        ::std::vector<::std::pair<size_t, ValueType> > result;
 
-        if constexpr (ranges::sized_range<R>) {
-            result.reserve(ranges::size(r));
+        if constexpr (::std::ranges::sized_range<R>) {
+            result.reserve(::std::ranges::size(r));
         }
 
         size_t index = 0;
@@ -40,6 +40,8 @@ namespace std {
         }
         return result;
     }
+#else
+    using std::ranges::views::enumerate;
 #endif
 }
 
@@ -81,7 +83,7 @@ void test_constructor(std::size_t count = 1000uz) {
             deque d(i + 1uz);
             assert(d.size() == (i + 1uz));
             assert(!d.empty());
-            for (auto [idx, v]: std::enumerate(d)) {
+            for (auto [idx, v]: my_ranges::enumerate(d)) {
                 assert(d[idx] == 0uz);
                 assert(v == 0uz);
             }
@@ -92,7 +94,7 @@ void test_constructor(std::size_t count = 1000uz) {
         for (auto i = 0uz; i != count; ++i) {
             deque d(i + 1uz, 0x7Euz);
             assert(d.size() == (i + 1uz));
-            for (auto [idx, v]: std::enumerate(d)) {
+            for (auto [idx, v]: my_ranges::enumerate(d)) {
                 assert(d[idx] == 0x7Euz);
                 assert(v == 0x7Euz);
             }
@@ -104,13 +106,13 @@ void test_constructor(std::size_t count = 1000uz) {
             assert(d.size() == (i + 1uz));
             deque d1(d.begin(), d.end());
             assert(d1.size() == (i + 1uz));
-            for (auto [idx, v]: std::enumerate(d)) {
+            for (auto [idx, ele]: my_ranges::enumerate(d)) {
                 assert(d[idx] == 0x7Euz);
-                assert(v == 0x7Euz);
+                assert(ele == 0x7Euz);
             }
-            for (auto [idx, v]: std::enumerate(d1)) {
+            for (auto [idx, ele]: my_ranges::enumerate(d1)) {
                 assert(d1[idx] == 0x7Euz);
-                assert(v == 0x7Euz);
+                assert(ele == 0x7Euz);
             }
             // forward/bidirectional iterator variant are equivalent to emplace_back
         }
@@ -167,7 +169,7 @@ void test_operator_assign(std::size_t count = 1000uz) {
             deque d1(100uz);
             d1 = d;
             assert(d.size() == (i + 1uz));
-            for (auto [idx, v]: std::enumerate(d1)) {
+            for (auto [idx, v]: my_ranges::enumerate(d1)) {
                 assert(d[idx] == idx);
                 assert(v == idx);
             }
@@ -192,7 +194,7 @@ void test_operator_assign(std::size_t count = 1000uz) {
 
 // assign
 template<typename deque>
-void test_assign(std::size_t count = 1000uz) {
+void test_assign() {
     using namespace std::ranges;
     // (1) equivalent to constructor (4)
     {
@@ -218,7 +220,7 @@ void test_assign(std::size_t count = 1000uz) {
 
 // assign_range
 template<typename deque>
-void test_assign_range(std::size_t count = 1000uz) {
+void test_assign_range() {
     deque d{};
     auto ilist = {0uz, 1uz, 2uz, 3uz};
 #if __cplusplus >= 202302L
@@ -232,29 +234,18 @@ void test_assign_range(std::size_t count = 1000uz) {
 // operator at tests in other tests above
 // at equivalent to operator at
 
-// front/back never fail
-template<typename deque>
-void test_front_back(std::size_t count = 1000uz) {
-    deque d(1uz);
-    auto &&ignore = d.front();
-    auto &&ignore1 = d.back();
-    deque const &d1 = d;
-    auto &&ignore2 = d1.front();
-    auto &&ignore3 = d1.back();
-}
-
 // size/empty tests in constructor's above and others
 
 // shrink_to_fit never fail
 template<typename deque>
-void test_shrink(std::size_t count = 1000uz) {
+void test_shrink() {
     deque d{};
     d.shrink_to_fit();
 }
 
 // clear tests in constructor (3) and others
 template<typename deque>
-void test_clear(std::size_t count = 1000uz) {
+void test_clear() {
     deque d{100uz};
     d.clear();
     assert(d.empty());
@@ -273,9 +264,9 @@ void test_emplace_back(std::size_t count = 1000uz) {
                 assert(d.size() == (j + 1uz));
             }
             for (auto j = 0uz; j != i; ++j) {
-                auto const size = i - j;
-                assert(d.size() == size);
-                assert(d[size - 1uz] == size - 1uz);
+                [[maybe_unused]] auto const _size = i - j;
+                assert(d.size() == _size);
+                assert(d[_size - 1uz] == _size - 1uz);
                 if (i) {
                     d.pop_back();
                 }
@@ -296,9 +287,8 @@ void test_emplace_back(std::size_t count = 1000uz) {
                 assert(d[j] == j);
             }
             for (auto j = 0uz; j != i; ++j) {
-                auto const size = i - j;
-                auto si = d.size();
-                assert(d.size() == size);
+                [[maybe_unused]] auto const _size = i - j;
+                assert(d.size() == _size);
                 assert(d[0] == j);
                 if (i) {
                     d.pop_front();
@@ -318,14 +308,14 @@ void test_emplace_front(const std::size_t count = 1000uz) {
                 assert(d[0uz] == i - j - 1uz);
                 assert(d.size() == (j + 1uz));
             }
-            for (auto [idx, v]: std::enumerate(d)) {
+            for (auto [idx, v]: my_ranges::enumerate(d)) {
                 assert(d[idx] == idx);
                 assert(v == idx);
             }
             for (auto j = 0uz; j != i; ++j) {
-                auto const size = i - j;
-                assert(d.size() == size);
-                assert(d[size - 1uz] == size - 1uz);
+                [[maybe_unused]] auto const _size = i - j;
+                assert(d.size() == _size);
+                assert(d[_size - 1uz] == _size - 1uz);
                 if (i) {
                     d.pop_back();
                 }
@@ -340,19 +330,18 @@ void test_emplace_front(const std::size_t count = 1000uz) {
             deque d(iota_r.begin(), iota_r.end());
 #endif
 
-            for (auto j = 0; j != half_head; ++j) {
+            for (unsigned long j = 0; j != half_head; ++j) {
                 d.emplace_front(half_head - j - 1uz);
                 assert(d.size() == ((i - half_head) + j + 1uz));
                 assert(d[0uz] == half_head - j - 1uz);
             }
-            for (auto [idx, v]: std::enumerate(d)) {
+            for (auto [idx, v]: my_ranges::enumerate(d)) {
                 assert(d[idx] == idx);
                 assert(v == idx);
             }
             for (auto j = 0uz; j != i; ++j) {
-                auto const size = i - j;
-                auto si = d.size();
-                assert(d.size() == size);
+                [[maybe_unused]] auto const _size = i - j;
+                assert(d.size() == _size);
                 assert(d[0] == j);
                 if (i) {
                     d.pop_front();
@@ -365,7 +354,7 @@ void test_emplace_front(const std::size_t count = 1000uz) {
 // pop_back/pop_front tests in emplace_back/emplace_front
 
 template<typename deque>
-void test_prep_app_end_range(std::size_t count = 1000uz) {
+void test_prep_app_end_range() {
     // equivlent to emplace_back/emplace_front
     {
         deque d{};
@@ -389,7 +378,7 @@ void test_prep_app_end_range(std::size_t count = 1000uz) {
 }
 
 template<typename deque>
-void test_resize(std::size_t count = 1000uz) {
+void test_resize() {
     {
         deque d{};
         d.resize(100uz);
@@ -402,7 +391,7 @@ void test_resize(std::size_t count = 1000uz) {
 }
 
 template<typename deque>
-void test_emplace_insert(std::size_t count = 1000uz) { {
+void test_emplace_insert() { {
         deque d;
         d.emplace(d.begin());
         assert(d.size() == 1uz);
@@ -436,29 +425,27 @@ template<typename Type>
 void test_all(std::size_t count = 1000uz) {
     test_constructor<std::deque<Type> >(count);
     test_operator_assign<std::deque<Type> >(count);
-    test_assign<std::deque<Type> >(count);
-    test_assign_range<std::deque<Type> >(count);
-    test_front_back<std::deque<Type> >(count);
-    test_shrink<std::deque<Type> >(count);
-    test_clear<std::deque<Type> >(count);
+    test_assign<std::deque<Type> >();
+    test_assign_range<std::deque<Type> >();
+    test_shrink<std::deque<Type> >();
+    test_clear<std::deque<Type> >();
     test_emplace_back<std::deque<Type> >(count);
     test_emplace_front<std::deque<Type> >(count);
-    test_prep_app_end_range<std::deque<Type> >(count);
-    test_resize<std::deque<Type> >(count);
-    test_emplace_insert<std::deque<Type> >(count);
+    test_prep_app_end_range<std::deque<Type> >();
+    test_resize<std::deque<Type> >();
+    test_emplace_insert<std::deque<Type> >();
     using namespace fast_io;
     test_constructor<deque<Type> >(count);
     test_operator_assign<deque<Type> >(count);
-    test_assign<deque<Type> >(count);
-    test_assign_range<deque<Type> >(count);
-    test_front_back<deque<Type> >(count);
-    test_shrink<deque<Type> >(count);
-    test_clear<deque<Type> >(count);
+    test_assign<deque<Type> >();
+    test_assign_range<deque<Type> >();
+    test_shrink<deque<Type> >();
+    test_clear<deque<Type> >();
     test_emplace_back<deque<Type> >(count);
     test_emplace_front<deque<Type> >(count);
-    test_prep_app_end_range<deque<Type> >(count);
-    test_resize<deque<Type> >(count);
-    test_emplace_insert<deque<Type> >(count);
+    test_prep_app_end_range<deque<Type> >();
+    test_resize<deque<Type> >();
+    test_emplace_insert<deque<Type> >();
 }
 
 struct metaindex
@@ -473,6 +460,7 @@ int main()
 
 	auto& vec20{vec[0]};
 	vec20.push_back(metaindex{20,30});
+::fast_io::deque<int> d(10);
 
     test_all<ele<1uz> >();
     test_all<ele<2uz> >();

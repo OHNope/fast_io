@@ -31,13 +31,15 @@ namespace fast_io::containers {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wc++26-extensions"
 #endif
-        template <typename... Args>
-        inline constexpr auto get(Args &&...args) noexcept
-        {
-            auto &first = args...[0uz];
-            auto &second = args...[1uz];
-            struct iter_ref_pair
-            {
+        template<typename... Args>
+        inline constexpr auto get(Args &&... args) noexcept {
+            auto &first = args
+            ...
+            [0uz];
+            auto &second = args
+            ...
+            [1uz];
+            struct iter_ref_pair {
                 decltype(first) &begin;
                 decltype(second) &end;
             };
@@ -371,7 +373,7 @@ namespace fast_io::containers {
             constexpr bucket_type &operator=(bucket_type const &) = default;
 
             constexpr ::std::size_t size() const noexcept {
-                return block_elem_end_ - block_elem_begin_;
+                return static_cast<::std::size_t>(block_elem_end_ - block_elem_begin_);
             }
 
             // empty and operator bool provided by view_interface
@@ -602,7 +604,7 @@ namespace fast_io::containers {
 
             constexpr deque_iterator operator++(int) noexcept {
 #if defined(__cpp_auto_cast)
-        return ++auto{*this};
+                return ++auto{*this};
 #else
                 auto temp(*this);
                 ++temp;
@@ -622,7 +624,7 @@ namespace fast_io::containers {
 
             constexpr deque_iterator operator--(int) noexcept {
 #if defined(__cpp_auto_cast)
-        return --auto{*this};
+                return --auto{*this};
 #else
                 auto temp(*this);
                 --temp;
@@ -654,7 +656,7 @@ namespace fast_io::containers {
 
             friend constexpr deque_iterator operator+(deque_iterator const &it, ::std::ptrdiff_t const pos) noexcept {
 #if defined(__cpp_auto_cast)
-        return auto{it}.plus_and_assign_(pos);
+                return auto{it}.plus_and_assign_(pos);
 #else
                 auto temp = it;
                 temp.plus_and_assign_(pos);
@@ -813,15 +815,15 @@ namespace fast_io::containers {
         }
 
         [[nodiscard]] constexpr ::std::size_t block_elem_size_() const noexcept {
-            return block_elem_end_ - block_elem_begin_;
+            return static_cast<::std::size_t>(block_elem_end_ - block_elem_begin_);
         }
 
         [[nodiscard]] constexpr ::std::size_t block_ctrl_size_() const noexcept {
-            return block_ctrl_end_ - block_ctrl_begin_();
+            return static_cast<::std::size_t>(block_ctrl_end_ - block_ctrl_begin_());
         }
 
         [[nodiscard]] constexpr ::std::size_t block_alloc_size_() const noexcept {
-            return block_alloc_end_ - block_alloc_begin_;
+            return static_cast<::std::size_t>(block_alloc_end_ - block_alloc_begin_);
         }
 
         constexpr void swap(deque &other) noexcept {
@@ -889,13 +891,13 @@ namespace fast_io::containers {
             auto const block_size = block_elem_size_();
             auto result = 0uz;
             if (block_size) {
-                result += elem_begin_end_ - elem_begin_begin_;
+                result += static_cast<unsigned long>(elem_begin_end_ - elem_begin_begin_);
             }
             if (block_size > 2uz) {
                 result += (block_size - 2uz) * details::block_elements_v<T>;
             }
             if (block_size > 1uz) {
-                result += elem_end_end_ - elem_end_begin_;
+                result += static_cast<unsigned long>(elem_end_end_ - elem_end_begin_);
             }
             return result;
         }
@@ -1108,11 +1110,13 @@ namespace fast_io::containers {
         constexpr void reserve_back_(::std::size_t const add_elem_size) {
             // 计算现有头尾是否够用
             // 头部块的cap
-            auto const head_block_cap = (block_elem_begin_ - block_alloc_begin_) * details::block_elements_v<T>;
+            auto const head_block_cap = static_cast<::std::size_t>(block_elem_begin_ - block_alloc_begin_) *
+                                        details::block_elements_v<T>;
             // 尾部块的cap
-            auto const tail_block_cap = (block_alloc_end_ - block_elem_end_) * details::block_elements_v<T>;
+            auto const tail_block_cap = static_cast<::std::size_t>(block_alloc_end_ - block_elem_end_) *
+                                        details::block_elements_v<T>;
             // 尾块的已使用大小
-            auto const tail_cap = elem_end_last_ - elem_end_end_ + 0uz;
+            auto const tail_cap = static_cast<::std::size_t>(elem_end_last_ - elem_end_end_) ;
             // non_move_cap为尾部-尾部已用，不移动块时cap
             auto const non_move_cap = tail_block_cap + tail_cap;
             // 首先如果cap足够，则不需要分配新block
@@ -1130,7 +1134,9 @@ namespace fast_io::containers {
             auto const add_block_size =
                     (add_elem_size - move_cap + details::block_elements_v<T> - 1uz) / details::block_elements_v<T>;
             // 获得目前控制块容许容量
-            auto const ctrl_cap = ((block_alloc_begin_ - block_ctrl_begin_()) + (block_ctrl_end_ - block_alloc_end_)) *
+            auto const ctrl_cap = static_cast<::std::size_t>(
+                                      (block_alloc_begin_ - block_ctrl_begin_()) + (block_ctrl_end_ - block_alloc_end_))
+                                  *
                                   details::block_elements_v<T> +
                                   move_cap;
             // 如果容许容量足够，那么移动alloc
@@ -1168,11 +1174,13 @@ namespace fast_io::containers {
         constexpr void reserve_front_(::std::size_t const add_elem_size) {
             // 计算现有头尾是否够用
             // 头部块的cap
-            auto const head_block_alloc_cap = (block_elem_begin_ - block_alloc_begin_) * details::block_elements_v<T>;
+            auto const head_block_alloc_cap = static_cast<::std::size_t>(block_elem_begin_ - block_alloc_begin_) *
+                                              details::block_elements_v<T>;
             // 尾部块的cap
-            auto const tail_block_alloc_cap = (block_alloc_end_ - block_elem_end_) * details::block_elements_v<T>;
+            auto const tail_block_alloc_cap = static_cast<::std::size_t>(block_alloc_end_ - block_elem_end_) *
+                                              details::block_elements_v<T>;
             // 头块的已使用大小
-            auto const head_cap = elem_begin_begin_ - elem_begin_first_ + 0uz;
+            auto const head_cap = static_cast<::std::size_t>(elem_begin_begin_ - elem_begin_first_) ;
             // non_move_cap为头部-头部已用，不移动块时cap
             auto const non_move_cap = head_block_alloc_cap + head_cap;
             // 首先如果cap足够，则不需要分配新block
@@ -1190,7 +1198,9 @@ namespace fast_io::containers {
             auto const add_block_size =
                     (add_elem_size - move_cap + details::block_elements_v<T> - 1uz) / details::block_elements_v<T>;
             // 获得目前控制块容许容量
-            auto const ctrl_cap = ((block_alloc_begin_ - block_ctrl_begin_()) + (block_ctrl_end_ - block_alloc_end_)) *
+            auto const ctrl_cap = static_cast<::std::size_t>(
+                                      (block_alloc_begin_ - block_ctrl_begin_()) + (block_ctrl_end_ - block_alloc_end_))
+                                  *
                                   details::block_elements_v<T> +
                                   move_cap;
             if (ctrl_cap >= add_elem_size) {
@@ -1364,7 +1374,7 @@ namespace fast_io::containers {
                     }
                 } else if constexpr (sizeof...(Ts) == 2uz) {
 #if defined(__cpp_pack_indexing)
-                auto [src_begin, src_end] = details::get(ts...);
+                    auto [src_begin, src_end] = details::get(ts...);
 #else
                     auto [src_begin, src_end] = details::get_first_two(::std::forward_as_tuple(ts...));
 #endif
@@ -1406,7 +1416,7 @@ namespace fast_io::containers {
                         }
                     } else if constexpr (sizeof...(Ts) == 2uz) {
 #if defined(__cpp_pack_indexing)
-                    auto [src_begin, src_end] = details::get(ts...);
+                        auto [src_begin, src_end] = details::get(ts...);
 #else
                         auto [src_begin, src_end] = details::get_first_two(::std::forward_as_tuple(ts...));
 #endif
@@ -1448,7 +1458,7 @@ namespace fast_io::containers {
                     }
                 } else if constexpr (sizeof...(Ts) == 2uz) {
 #if defined(__cpp_pack_indexing)
-                auto [src_begin, src_end] = details::get(ts...);
+                    auto [src_begin, src_end] = details::get(ts...);
 #else
                     auto [src_begin, src_end] = details::get_first_two(::std::forward_as_tuple(ts...));
 #endif
@@ -1531,7 +1541,8 @@ namespace fast_io::containers {
         template<::std::random_access_iterator U>
         constexpr void from_range_noguard_(U &&first, U &&last) {
             if (first != last) {
-                auto const [block_size, full_blocks, rem_elems] = details::calc_cap<T>(last - first);
+                auto const [block_size, full_blocks, rem_elems] = details::calc_cap<T>(
+                    static_cast<::std::size_t>(last - first));
                 extent_block_(block_size);
                 construct_(full_blocks, rem_elems, ::std::forward<U>(first), ::std::forward<U>(last));
             }
@@ -1718,8 +1729,9 @@ namespace fast_io::containers {
                                         ? (::std::to_address(*target_block) + elem_step < elem_end_end_)
                                         : true;
             if constexpr (throw_exception) {
-                if (not(check_block && check_elem))
-                    throw ::std::out_of_range{"deque::at"};
+                if (not(check_block && check_elem)) {
+                    fast_terminate();
+                }
             } else {
                 if (!(check_block && check_elem)) [[unlikely]] {
                     fast_terminate();
@@ -1976,7 +1988,7 @@ namespace fast_io::containers {
 
         template<::std::random_access_iterator U>
         constexpr void append_range_noguard_(U &&first, U &&last) {
-            reserve_back_(last - first);
+            reserve_back_(static_cast<::std::size_t>(last - first));
             for (; first != last; ++first) {
                 emplace_back_noalloc_(*first);
             }
@@ -2022,7 +2034,7 @@ namespace fast_io::containers {
 
         template<::std::random_access_iterator U>
         constexpr void prepend_range_noguard_(U &&first, U &&last) {
-            reserve_front_(last - first);
+            reserve_front_(static_cast<::std::size_t>(last - first));
             for (; first != last;) {
                 --last;
                 emplace_front_noalloc_(*last);
@@ -2156,7 +2168,7 @@ namespace fast_io::containers {
         // 从最后一个块开始
         constexpr void back_emplace_(Block *const block_curr, T *const elem_curr) {
             auto const block_end = block_elem_end_;
-            auto const block_size = block_end - block_curr - 1uz;
+            auto const block_size = static_cast<::std::size_t>( block_end - block_curr) - 1uz;
             // 每次移动时留下的空位
             auto last_elem = elem_end_begin_;
             // 先记录尾块块尾位置
@@ -2197,7 +2209,7 @@ namespace fast_io::containers {
         // 将前半部分向前移动1
         constexpr void front_emplace_(Block *const block_curr, T *const elem_curr) {
             auto const block_begin = block_elem_begin_;
-            auto const block_size = block_curr - block_begin + 0uz;
+            auto const block_size = static_cast<::std::size_t>(block_curr - block_begin) ;
             // 向前移动后尾部空出来的的后面一个位置
             auto const last_elem_begin = elem_begin_begin_;
             auto last_elem_end = elem_begin_end_;
@@ -2241,8 +2253,8 @@ namespace fast_io::containers {
                 return begin();
             }
             // 此时容器一定不为空
-            auto const back_diff = end_pre - pos + 0uz;
-            auto const front_diff = pos - begin_pre + 0uz;
+            auto const back_diff = static_cast<::std::size_t>(end_pre - pos) ;
+            auto const front_diff = static_cast<::std::size_t>(pos - begin_pre) ;
             // NB:
             // 如果args是当前容器的元素的引用，那么必须使得该元素先被emplace_back/front后再被移动到正确位置，否则该引用会失效，同时reserve不会导致引用失效
             // 此处逻辑和无分配器版本稍微不一样
@@ -2250,7 +2262,7 @@ namespace fast_io::containers {
                 reserve_back_(2uz);
                 emplace_back_noalloc_(::std::forward<Args>(args)...); // 满足标准要求经过A::construct
                 // back_emplace向后移动1个元素并插入，因此先reserve以获得一个不失效的pos
-                auto new_pos = begin() + front_diff;
+                auto new_pos = begin() + static_cast<::std::ptrdiff_t>(front_diff);
                 back_emplace_(new_pos.block_elem_curr_, new_pos.elem_curr_);
                 *new_pos = ::std::move(back());
                 pop_back();
@@ -2258,7 +2270,7 @@ namespace fast_io::containers {
             } else {
                 reserve_front_(2uz);
                 emplace_front_noalloc_(::std::forward<Args>(args)...);
-                auto new_pos = end() - back_diff;
+                auto new_pos = end() - static_cast<::std::ptrdiff_t>(back_diff);
                 front_emplace_(new_pos.block_elem_curr_, new_pos.elem_curr_);
                 *(--new_pos) = ::std::move(front());
                 pop_front();
@@ -2305,8 +2317,8 @@ namespace fast_io::containers {
                 prepend_range_noguard_(::std::forward<R>(rg));
                 return begin();
             }
-            auto const back_diff = end_pre - pos + 0uz;
-            auto const front_diff = pos - begin_pre + 0uz;
+            auto const back_diff = end_pre - pos ;
+            auto const front_diff = pos - begin_pre ;
 
             if (back_diff <= front_diff) {
                 auto const old_size = size();
@@ -2339,8 +2351,8 @@ namespace fast_io::containers {
                 prepend_range_noguard_(::std::forward<U>(first), ::std::forward<V>(last));
                 return begin();
             }
-            auto const back_diff = end_pre - pos + 0uz;
-            auto const front_diff = pos - begin_pre + 0uz;
+            auto const back_diff = end_pre - pos ;
+            auto const front_diff = pos - begin_pre ;
             if (back_diff <= front_diff) {
                 auto const old_size = size();
                 append_range_noguard_(::std::forward<U>(first), ::std::forward<V>(last));
@@ -2363,9 +2375,8 @@ namespace fast_io::containers {
 #if __cplusplus >= 202302L
             return insert_range(pos, ::std::ranges::views::repeat(value, count));
 #else
-            auto repeat_view = std::ranges::views::iota(0u, count)
-                               | std::ranges::views::transform([&](auto) { return value; });
-            return insert_range(pos, repeat_view);
+            auto repeat_view = std::views::iota(0u, count)
+                   | std::views::transform([&](auto) { return value; });
 #endif
         }
 
@@ -2380,8 +2391,8 @@ namespace fast_io::containers {
                 pop_back();
                 return end();
             }
-            auto const back_diff = end_pre - pos + 0uz;
-            auto const front_diff = pos - begin_pre + 0uz;
+            auto const back_diff = end_pre - pos ;
+            auto const front_diff = pos - begin_pre ;
             if (back_diff <= front_diff) {
                 ::std::ranges::move((pos + 1uz).remove_const_(), end(), pos.remove_const_());
                 pop_back();
@@ -2404,8 +2415,8 @@ namespace fast_io::containers {
                 pop_back_n_(last - first);
                 return end();
             }
-            auto const back_diff = end_pre - last + 0uz;
-            auto const front_diff = first - begin_pre + 0uz;
+            auto const back_diff = end_pre - last ;
+            auto const front_diff = first - begin_pre ;
             if (back_diff <= front_diff) {
                 ::std::ranges::move(last, end(), first.remove_const_());
                 pop_back_n_(last - first);
