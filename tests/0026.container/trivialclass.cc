@@ -7,18 +7,6 @@
 #include <vector>
 #include <deque>
 
-#if !defined(__cpp_size_t_suffix) || __cpp_size_t_suffix < 202011L
-// make IntelliSence happy
-// _uz is a reserved suffix, but this is for a test file and IntelliSence.
-// A production-safe version would be operator"" uz, without the underscore.
-inline constexpr std::size_t operator"" _uz(unsigned long long const value) noexcept {
-    return value;
-}
-#define uz _uz
-#else
-#define uz uz
-#endif
-
 namespace my_ranges {
     // The from_range_t fallback is no longer needed as we use preprocessor checks.
 

@@ -13,11 +13,19 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-      - name: Install latest stable GCC (GCC 14)
-        uses: egor-tensin/setup-g++@v3
-        with:
-          version: 15  # Pin to the current latest stable version
-          platform: x64
+      - name: Install latest available GCC
+        run: |
+          sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
+          sudo apt-get update
+          # 查找版本号最高的 g++ 包
+          LATEST_GCC_VERSION=$(apt-cache search g\+\+ | grep -oP '^g\+\+-\K[0-9]+' | sort -rn | head -n 1)
+          echo "Found latest GCC version: ${LATEST_GCC_VERSION}"
+          sudo apt-get install -y g++-${LATEST_GCC_VERSION}
+          # 设置新版本为默认编译器
+          sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-${LATEST_GCC_VERSION} 100
+          sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-${LATEST_GCC_VERSION} 100
+      - name: Verify GCC version
+        run: g++ --version
       - name: Install ninja-build tool
         uses: seanmiddleditch/gha-setup-ninja@v5
       - name: cmake
@@ -26,7 +34,6 @@ jobs:
         run: ninja
       - name: ninja test
         run: ninja test
-
 
   windows:
 
