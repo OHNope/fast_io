@@ -397,15 +397,6 @@ namespace fast_io::containers {
                 return {elem_end_begin_, elem_end_end_};
             }
 
-            constexpr ::std::span<T> at(::std::size_t const pos) noexcept {
-                return at_impl(pos);
-            }
-
-            constexpr ::std::span<const T> at(::std::size_t const pos) const noexcept
-                requires(not::std::is_const_v<T>) {
-                auto const s = at_impl(pos);
-                return {s.data(), s.size()};
-            }
 
             constexpr const_iterator begin() const noexcept {
                 return {
@@ -501,15 +492,6 @@ namespace fast_io::containers {
             constexpr deque_iterator<RConstT, Block> remove_const_() const noexcept
                 requires(::std::is_const_v<T>) {
                 return {block_elem_curr_, block_elem_end_, elem_begin_, elem_curr_};
-            }
-
-            constexpr T &at_impl_(::std::ptrdiff_t const pos) const noexcept {
-                auto const [block_step, elem_step] = details::calc_pos<T>(elem_curr_ - elem_begin_, pos);
-                auto const target_block = block_elem_curr_ + block_step;
-                if (!(target_block < block_elem_end_)) [[unlikely]] {
-                    fast_terminate();
-                }
-                return *((*target_block) + elem_step);
             }
 
             constexpr deque_iterator &plus_and_assign_(::std::ptrdiff_t const pos) noexcept {
@@ -641,13 +623,31 @@ namespace fast_io::containers {
                 return temp;
 #endif
             }
-
+#if __has_cpp_attribute(__gnu__::__always_inline__)
+            [[__gnu__::__always_inline__]]
+#elif __has_cpp_attribute(msvc::forceinline)
+            [[msvc::forceinline]]
+#endif
             constexpr T &operator[](::std::ptrdiff_t const pos) noexcept {
-                return at_impl_(pos);
+                auto const [block_step, elem_step] = details::calc_pos<T>(elem_curr_ - elem_begin_, pos);
+                auto const target_block = block_elem_curr_ + block_step;
+                if (!(target_block < block_elem_end_)) [[unlikely]] {
+                    fast_terminate();
+                }
+                return *((*target_block) + elem_step);
             }
-
+#if __has_cpp_attribute(__gnu__::__always_inline__)
+            [[__gnu__::__always_inline__]]
+#elif __has_cpp_attribute(msvc::forceinline)
+            [[msvc::forceinline]]
+#endif
             constexpr T &operator[](::std::ptrdiff_t const pos) const noexcept {
-                return at_impl_(pos);
+                auto const [block_step, elem_step] = details::calc_pos<T>(elem_curr_ - elem_begin_, pos);
+                auto const target_block = block_elem_curr_ + block_step;
+                if (!(target_block < block_elem_end_)) [[unlikely]] {
+                    fast_terminate();
+                }
+                return *((*target_block) + elem_step);
             }
 
             friend constexpr ::std::ptrdiff_t operator-(deque_iterator const &lhs, deque_iterator const &rhs) noexcept {
@@ -1710,28 +1710,6 @@ namespace fast_io::containers {
         }
 
     private:
-        template<bool throw_exception = false>
-        constexpr T &at_impl_(::std::size_t const pos) const noexcept(!throw_exception) {
-            auto const front_size = static_cast<::std::size_t>(elem_begin_begin_ - elem_begin_first_);
-            auto const [block_step, elem_step] = details::calc_pos<T>(front_size, pos);
-            auto const target_block = block_elem_begin_ + block_step;
-            auto const check_block = target_block < block_elem_end_;
-            auto const check_elem = (target_block + 1 == block_elem_end_)
-                                        ? (::std::to_address(*target_block) + elem_step < elem_end_end_)
-                                        : true;
-            if constexpr (throw_exception) {
-                if (not(check_block && check_elem)) {
-                    fast_terminate();
-                }
-            } else {
-                if (!(check_block && check_elem)) [[unlikely]] {
-                    fast_terminate();
-                }
-            }
-            return *((*target_block) + elem_step);
-        }
-
-
         template<typename... V>
         constexpr T &emplace_front_pre_(::std::size_t const block_size, V &&... v) {
             auto const begin = ::std::to_address(elem_begin_begin_ - 1);
@@ -1777,22 +1755,37 @@ namespace fast_io::containers {
             }
         }
 
-        constexpr T &at(::std::size_t const pos) noexcept {
-            return at_impl_<true>(pos);
-        }
-
-        constexpr T const &at(::std::size_t const pos) const noexcept {
-            return at_impl_<true>(pos);
-        }
-
         constexpr T &operator[](::std::size_t const pos) noexcept {
-            return at_impl_(pos);
+            auto const front_size = static_cast<::std::size_t>(elem_begin_begin_ - elem_begin_first_);
+            auto const [block_step, elem_step] = details::calc_pos<T>(front_size, pos);
+            auto const target_block = block_elem_begin_ + block_step;
+            auto const check_block = target_block < block_elem_end_;
+            auto const check_elem = (target_block + 1 == block_elem_end_)
+                                        ? (::std::to_address(*target_block) + elem_step < elem_end_end_)
+                                        : true;
+
+            if (!(check_block && check_elem)) [[unlikely]] {
+                fast_terminate();
+            }
+
+            return *((*target_block) + elem_step);
         }
 
         constexpr T const &operator[](::std::size_t const pos) const noexcept {
-            return at_impl_(pos);
-        }
+            auto const front_size = static_cast<::std::size_t>(elem_begin_begin_ - elem_begin_first_);
+            auto const [block_step, elem_step] = details::calc_pos<T>(front_size, pos);
+            auto const target_block = block_elem_begin_ + block_step;
+            auto const check_block = target_block < block_elem_end_;
+            auto const check_elem = (target_block + 1 == block_elem_end_)
+                                        ? (::std::to_address(*target_block) + elem_step < elem_end_end_)
+                                        : true;
 
+            if (!(check_block && check_elem)) [[unlikely]] {
+                fast_terminate();
+            }
+
+            return *((*target_block) + elem_step);
+        }
 
         constexpr void shrink_to_fit() noexcept {
             if (block_alloc_size_() != 0) {
