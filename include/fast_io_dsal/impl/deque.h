@@ -12,7 +12,7 @@ namespace fast_io::containers {
             a.allocate(0);
         };
 
-        // 用于从参数包中获得前两个对象（只有两个）的引用的辅助函数
+
 #if not defined(__cpp_pack_indexing)
         template<typename Tuple>
         inline constexpr auto get_first_two(Tuple args) noexcept {
@@ -61,26 +61,25 @@ namespace fast_io::containers {
             return nullptr;
         }
 
-        // 构造函数和赋值用，计算如何分配和构造
+
         template<typename T>
         inline constexpr auto calc_cap(::std::size_t const size) noexcept {
             auto const block_elems = block_elements_v<T>;
             struct cap_t {
-                ::std::size_t block_size; // 需要分配多少block
-                ::std::size_t full_blocks; // 分配了几个完整block
-                ::std::size_t rem_elems; // 剩下的不完整block有多少元素
+                ::std::size_t block_size;
+                ::std::size_t full_blocks;
+                ::std::size_t rem_elems;
             };
             return cap_t{(size + block_elems - 1) / block_elems, size / block_elems, size % block_elems};
         }
 
-        // 该函数计算位置，参数front_size是起始位置和块首的距离，pos是目标位置
-        // 对于负数pos返回负数位置
+
         template<typename T>
         inline constexpr auto calc_pos(::std::ptrdiff_t const front_size, ::std::ptrdiff_t const pos) noexcept {
             ::std::ptrdiff_t const block_elems = block_elements_v<T>;
             struct pos_t {
-                ::std::ptrdiff_t block_step; // 移动块的步数
-                ::std::ptrdiff_t elem_step; // 移动元素的步数（相对于块首）
+                ::std::ptrdiff_t block_step;
+                ::std::ptrdiff_t elem_step;
             };
             if (pos >= 0) {
                 auto const new_pos = pos + front_size;
@@ -95,8 +94,8 @@ namespace fast_io::containers {
         inline constexpr auto calc_pos(::std::size_t const front_size, ::std::size_t const pos) noexcept {
             ::std::size_t const block_elems = block_elements_v<T>;
             struct pos_t {
-                ::std::size_t block_step; // 移动块的步数
-                ::std::size_t elem_step; // 移动元素的步数（相对于块首）
+                ::std::size_t block_step;
+                ::std::size_t elem_step;
             };
             auto const new_pos = pos + front_size;
             return pos_t{new_pos / block_elems, new_pos % block_elems};
@@ -555,6 +554,20 @@ namespace fast_io::containers {
                 return elem_curr_ == other.elem_curr_;
             }
 
+            constexpr pointer operator->() noexcept {
+                if (!(elem_curr_ != elem_begin_ + details::block_elements_v<T>)) [[unlikely]] {
+                    fast_terminate();
+                }
+                return elem_curr_;
+            }
+
+            constexpr pointer operator->() const noexcept {
+                if (!(elem_curr_ != elem_begin_ + details::block_elements_v<T>)) [[unlikely]] {
+                    fast_terminate();
+                }
+                return elem_curr_;
+            }
+
             constexpr ::std::strong_ordering operator<=>(deque_iterator const &other) const noexcept {
                 if (!(block_elem_end_ == other.block_elem_end_)) [[unlikely]] {
                     fast_terminate();
@@ -585,7 +598,6 @@ namespace fast_io::containers {
             }
 
             constexpr deque_iterator &operator++() noexcept {
-                // 空deque的迭代器不能自增，不需要考虑
                 if (!(elem_curr_ != elem_begin_ + details::block_elements_v<T>)) [[unlikely]] {
                     fast_terminate();
                 }
@@ -695,35 +707,35 @@ namespace fast_io::containers {
             a.construct(static_cast<T *>(nullptr));
         };
 
-        // 给natvis使用，注意不要在其它函数中使用它，以支持使用不完整类型实例化。
+
         static inline constexpr ::std::size_t block_elements = details::block_elements_v<T>;
 
         using Block = T *;
         using BlockFP = Block *;
 
-        // 块数组的起始地址
+
         BlockFP block_ctrl_begin_fancy_{};
-        // 块数组的结束地址
+
         Block *block_ctrl_end_{};
-        // 已分配块的起始地址
+
         Block *block_alloc_begin_{};
-        // 已分配块结束地址
+
         Block *block_alloc_end_{};
-        // 已用块的首地址
+
         Block *block_elem_begin_{};
-        // 已用块的结束地址
+
         Block *block_elem_end_{};
-        // 首个有效块的起始分配地址
+
         T *elem_begin_first_{};
-        // 首个有效块的首元素地址
+
         T *elem_begin_begin_{};
-        // 首个有效块的结束分配以及尾后元素地址
+
         T *elem_begin_end_{};
-        // 有效末尾块的起始分配以及起始元素地址
+
         T *elem_end_begin_{};
-        // 有效末尾块的尾后元素地址
+
         T *elem_end_end_{};
-        // 有效末尾块的结束分配地址
+
         T *elem_end_last_{};
 
         [[nodiscard]] constexpr Block *block_ctrl_begin_() const noexcept {
@@ -763,16 +775,15 @@ namespace fast_io::containers {
             /* */
         }
 
-        // 空deque安全，但执行后必须手动维护状态合法
+
         constexpr void destroy_elems_() noexcept {
-            // 4种情况，0，1，2，3+个块有元素
             auto const block_size = block_elem_size_();
             if (block_size) {
                 for (auto const &i: ::std::ranges::subrange{elem_begin_begin_, elem_begin_end_}) {
                     ::std::destroy_at(::std::addressof(i));
                 }
             }
-            // 清理中间的块
+
             if (block_size > 2) {
                 for (auto const block_begin: ::std::ranges::subrange{block_elem_begin_ + 1, block_elem_end_ - 1}) {
                     for (auto const &i:
@@ -788,10 +799,10 @@ namespace fast_io::containers {
             }
         }
 
-        // 完全等于析构函数
+
         constexpr void destroy_() noexcept {
             destroy_elems_();
-            // 清理块数组
+
             for (auto const i: ::std::ranges::subrange{block_alloc_begin_, block_alloc_end_}) {
                 dealloc_block_(i);
             }
@@ -884,7 +895,7 @@ namespace fast_io::containers {
             elem_end_(nullptr, nullptr, nullptr);
         }
 
-        // 空deque安全
+
         [[nodiscard]] constexpr ::std::size_t size() const noexcept {
             auto const block_size = block_elem_size_();
             ::std::size_t result = 0;
@@ -963,17 +974,17 @@ namespace fast_io::containers {
             return const_reverse_iterator{begin()};
         }
 
+        [[nodiscard]] static constexpr allocator_type get_allocator() noexcept {
+            return allocator_type{};
+        }
+
     private:
-        // 负责分配块数组
-        // 构造和扩容时都可以使用
         struct ctrl_alloc_ {
             deque &d;
             BlockFP block_ctrl_begin_fancy{}; // A
             Block *block_ctrl_end{}; // D
 
-            // 替换块数组到deque
-            // 构造函数专用
-            // 对空deque安全
+
             constexpr void replace_ctrl() const noexcept {
                 d.block_ctrl_begin_fancy_ = block_ctrl_begin_fancy;
                 d.block_ctrl_end_ = block_ctrl_end;
@@ -983,13 +994,12 @@ namespace fast_io::containers {
                 d.block_elem_end_ = d.block_alloc_begin_;
             }
 
-            // 扩容时，back为插入元素的方向
-            // 对空deque安全
+
             constexpr void replace_ctrl_back() const noexcept {
                 d.align_elem_alloc_as_ctrl_back_(details::to_address(block_ctrl_begin_fancy));
                 d.dealloc_ctrl_();
-                // 注意顺序
-                // 从alloc替换回deque
+
+
                 d.block_ctrl_begin_fancy_ = block_ctrl_begin_fancy;
                 d.block_ctrl_end_ = block_ctrl_end;
             }
@@ -997,13 +1007,13 @@ namespace fast_io::containers {
             constexpr void replace_ctrl_front() const noexcept {
                 d.align_elem_alloc_as_ctrl_front_(block_ctrl_end);
                 d.dealloc_ctrl_();
-                // 注意顺序
-                // 从alloc替换回deque
+
+
                 d.block_ctrl_begin_fancy_ = block_ctrl_begin_fancy;
                 d.block_ctrl_end_ = block_ctrl_end;
             }
 
-            // 参数是新大小
+
             constexpr ctrl_alloc_(deque &dq, ::std::size_t const ctrl_size) : d(dq) {
                 auto const size = (ctrl_size + (4 - 1)) / 4 * 4;
                 block_ctrl_begin_fancy = d.alloc_ctrl_(size);
@@ -1011,8 +1021,7 @@ namespace fast_io::containers {
             }
         };
 
-        // 对齐控制块
-        // 对齐alloc和ctrl的begin
+
         constexpr void align_alloc_as_ctrl_back_() noexcept {
             ::std::ranges::copy(block_alloc_begin_, block_alloc_end_, block_ctrl_begin_());
             auto const block_size = block_alloc_size_();
@@ -1020,8 +1029,7 @@ namespace fast_io::containers {
             block_alloc_end_ = block_ctrl_begin_() + block_size;
         }
 
-        // 对齐控制块
-        // 对齐alloc和ctrl的end
+
         constexpr void align_alloc_as_ctrl_front_() noexcept {
             ::std::ranges::copy_backward(block_alloc_begin_, block_alloc_end_, block_ctrl_end_);
             auto const block_size = block_alloc_size_();
@@ -1029,8 +1037,7 @@ namespace fast_io::containers {
             block_alloc_begin_ = block_ctrl_end_ - block_size;
         }
 
-        // 对齐控制块
-        // 对齐elem和alloc的begin
+
         constexpr void align_elem_as_alloc_back_() noexcept {
             ::std::ranges::rotate(block_alloc_begin_, block_elem_begin_, block_elem_end_);
             auto const block_size = block_elem_size_();
@@ -1038,8 +1045,7 @@ namespace fast_io::containers {
             block_elem_end_ = block_alloc_begin_ + block_size;
         }
 
-        // 对齐控制块
-        // 对齐elem和alloc的end
+
         constexpr void align_elem_as_alloc_front_() noexcept {
             ::std::ranges::rotate(block_elem_begin_, block_elem_end_, block_alloc_end_);
             auto const block_size = block_elem_size_();
@@ -1047,8 +1053,7 @@ namespace fast_io::containers {
             block_elem_begin_ = block_alloc_end_ - block_size;
         }
 
-        // ctrl_begin可以是自己或者新ctrl的
-        // 对齐控制块所有指针
+
         constexpr void align_elem_alloc_as_ctrl_back_(Block *const ctrl_begin) noexcept {
             align_elem_as_alloc_back_();
             auto const alloc_block_size = block_alloc_size_();
@@ -1060,8 +1065,7 @@ namespace fast_io::containers {
             block_elem_end_ = ctrl_begin + elem_block_size;
         }
 
-        // ctrl_end可以是自己或者新ctrl的
-        // 对齐控制块所有指针
+
         constexpr void align_elem_alloc_as_ctrl_front_(Block *const ctrl_end) noexcept {
             align_elem_as_alloc_front_();
             auto const alloc_block_size = block_alloc_size_();
@@ -1073,8 +1077,7 @@ namespace fast_io::containers {
             block_elem_begin_ = ctrl_end - elem_block_size;
         }
 
-        // 向前分配新block，需要block_size小于等于(block_alloc_begin -
-        // block_ctrl_begin) 且不block_alloc_X不是空指针
+
         constexpr void extent_block_front_uncond_(::std::size_t const block_size) {
             if (!(block_alloc_begin_ != block_ctrl_begin_())) [[unlikely]] {
                 fast_terminate();
@@ -1088,8 +1091,7 @@ namespace fast_io::containers {
             }
         }
 
-        // 向后分配新block，需要block_size小于等于(block_ctrl_end - block_alloc_end)
-        // 且不block_alloc_X不是空指针
+
         constexpr void extent_block_back_uncond_(::std::size_t const block_size) {
             if (!(block_alloc_end_ != block_ctrl_end_)) [[unlikely]] {
                 fast_terminate();
@@ -1103,53 +1105,48 @@ namespace fast_io::containers {
             }
         }
 
-        // 向back扩展
-        // 对空deque安全
+
         constexpr void reserve_back_(::std::size_t const add_elem_size) {
-            // 计算现有头尾是否够用
-            // 头部块的cap
             auto const head_block_cap = static_cast<::std::size_t>(block_elem_begin_ - block_alloc_begin_) *
                                         details::block_elements_v<T>;
-            // 尾部块的cap
+
             auto const tail_block_cap = static_cast<::std::size_t>(block_alloc_end_ - block_elem_end_) *
                                         details::block_elements_v<T>;
-            // 尾块的已使用大小
+
             auto const tail_cap = static_cast<::std::size_t>(elem_end_last_ - elem_end_end_);
-            // non_move_cap为尾部-尾部已用，不移动块时cap
+
             auto const non_move_cap = tail_block_cap + tail_cap;
-            // 首先如果cap足够，则不需要分配新block
+
             if (non_move_cap >= add_elem_size) {
                 return;
             }
-            // move_cap为头部+尾部-尾部已用，移动已分配块的cap
+
             auto const move_cap = head_block_cap + non_move_cap;
-            // 如果move_cap够则移动
+
             if (move_cap >= add_elem_size) {
                 align_elem_as_alloc_back_();
                 return;
             }
-            // 计算需要分配多少块数组，无论接下来是什么逻辑都直接使用它
+
             auto const add_block_size =
                     (add_elem_size - move_cap + details::block_elements_v<T> - 1) / details::block_elements_v<T>;
-            // 获得目前控制块容许容量
+
             auto const ctrl_cap = static_cast<::std::size_t>(
                                       (block_alloc_begin_ - block_ctrl_begin_()) + (block_ctrl_end_ - block_alloc_end_))
                                   *
                                   details::block_elements_v<T> +
                                   move_cap;
-            // 如果容许容量足够，那么移动alloc
+
             if (ctrl_cap >= add_elem_size) {
                 align_elem_alloc_as_ctrl_back_(block_ctrl_begin_());
             } else {
-                // 否则扩展控制块
                 ctrl_alloc_ const ctrl{*this, block_alloc_size_() + add_block_size}; // may throw
                 ctrl.replace_ctrl_back();
             }
             extent_block_back_uncond_(add_block_size);
         }
 
-        // 向back扩展
-        // 对空deque安全
+
         constexpr void reserve_one_back_() {
             if (block_alloc_end_ != block_elem_end_) {
                 return;
@@ -1161,41 +1158,38 @@ namespace fast_io::containers {
             if ((block_alloc_begin_ - block_ctrl_begin_()) + (block_ctrl_end_ - block_alloc_end_) != 0) {
                 align_elem_alloc_as_ctrl_back_(block_ctrl_begin_());
             } else {
-                // 否则扩展控制块
                 ctrl_alloc_ const ctrl{*this, block_alloc_size_() + 1}; // may throw
                 ctrl.replace_ctrl_back();
             }
             extent_block_back_uncond_(1);
         }
 
-        // 从front扩展block，空deque安全
+
         constexpr void reserve_front_(::std::size_t const add_elem_size) {
-            // 计算现有头尾是否够用
-            // 头部块的cap
             auto const head_block_alloc_cap = static_cast<::std::size_t>(block_elem_begin_ - block_alloc_begin_) *
                                               details::block_elements_v<T>;
-            // 尾部块的cap
+
             auto const tail_block_alloc_cap = static_cast<::std::size_t>(block_alloc_end_ - block_elem_end_) *
                                               details::block_elements_v<T>;
-            // 头块的已使用大小
+
             auto const head_cap = static_cast<::std::size_t>(elem_begin_begin_ - elem_begin_first_);
-            // non_move_cap为头部-头部已用，不移动块时cap
+
             auto const non_move_cap = head_block_alloc_cap + head_cap;
-            // 首先如果cap足够，则不需要分配新block
+
             if (non_move_cap >= add_elem_size) {
                 return;
             }
-            // move_cap为头部-头部已用+尾部，移动已分配块的cap
+
             auto const move_cap = non_move_cap + tail_block_alloc_cap;
-            // 如果move_cap够则移动
+
             if (move_cap >= add_elem_size) {
                 align_elem_as_alloc_front_();
                 return;
             }
-            // 计算需要分配多少块数组，无论接下来是什么逻辑都直接使用它
+
             auto const add_block_size =
                     (add_elem_size - move_cap + details::block_elements_v<T> - 1) / details::block_elements_v<T>;
-            // 获得目前控制块容许容量
+
             auto const ctrl_cap = static_cast<::std::size_t>(
                                       (block_alloc_begin_ - block_ctrl_begin_()) + (block_ctrl_end_ - block_alloc_end_))
                                   *
@@ -1204,16 +1198,14 @@ namespace fast_io::containers {
             if (ctrl_cap >= add_elem_size) {
                 align_elem_alloc_as_ctrl_front_(block_ctrl_end_);
             } else {
-                // 否则扩展控制块
                 ctrl_alloc_ const ctrl{*this, block_alloc_size_() + add_block_size}; // may throw
                 ctrl.replace_ctrl_front();
             }
-            // 必须最后执行
+
             extent_block_front_uncond_(add_block_size);
         }
 
-        // 向back扩展
-        // 对空deque安全
+
         constexpr void reserve_one_front_() {
             if (block_elem_begin_ != block_alloc_begin_) {
                 return;
@@ -1225,7 +1217,6 @@ namespace fast_io::containers {
             if ((block_alloc_begin_ - block_ctrl_begin_()) + (block_ctrl_end_ - block_alloc_end_) != 0) {
                 align_elem_alloc_as_ctrl_front_(block_ctrl_end_);
             } else {
-                // 否则扩展控制块
                 ctrl_alloc_ const ctrl{*this, block_alloc_size_() + 1}; // may throw
                 ctrl.replace_ctrl_front();
             }
@@ -1251,8 +1242,7 @@ namespace fast_io::containers {
             }
         };
 
-        // 构造函数和赋值的辅助函数
-        // 调用后可直接填充元素
+
         constexpr void extent_block_(::std::size_t const new_block_size) {
             if (new_block_size != 0) {
                 auto const ctrl_block_size = block_ctrl_size_();
@@ -1276,12 +1266,10 @@ namespace fast_io::containers {
             }
         }
 
-        // 构造函数和复制赋值的辅助函数，调用前必须分配内存，以及用于构造时使用guard
+
         template<bool move = false>
         constexpr void copy_(const_bucket_type const other, ::std::size_t const block_size) {
             if (block_size) {
-                // 此时最为特殊，因为只有一个有效快时，可以从头部生长也可以从尾部生长
-                // 这里选择按头部生长简化代码
                 auto const elem_size = other.elem_begin_end_ - other.elem_begin_begin_;
                 auto const first = *block_elem_end_;
                 auto const last = first + details::block_elements_v<T>;
@@ -1338,13 +1326,19 @@ namespace fast_io::containers {
             requires ::std::default_initializable<allocator>
         = default;
 
+        explicit constexpr deque(allocator const & /*alloc*/) noexcept
+            requires ::std::default_initializable<allocator> {
+        }
+
+        constexpr deque(deque const &other, allocator const & /*alloc*/) : deque(other) {
+        }
+
+        constexpr deque(deque &&other, allocator const & /*alloc*/) noexcept : deque(::std::move(other)) {
+        }
+
     private:
-        // 万能构造
-        // 使用count、count和T、或者随机访问迭代器进行构造
-        // 注意异常安全，需要调用者使用guard，并且分配好足够多内存
         template<typename... Ts>
         constexpr void construct_(::std::size_t const full_blocks, ::std::size_t const rem_elems, Ts &&... ts) {
-            // 由于析构优先考虑elem_begin，因此必须独立构造elem_begin
             if (full_blocks) {
                 auto const begin = *block_elem_end_;
                 auto const end = begin + details::block_elements_v<T>;
@@ -1466,35 +1460,34 @@ namespace fast_io::containers {
                 } else {
                     static_assert(false);
                 }
-                if (full_blocks == 0) // 注意
-                {
+                if (full_blocks == 0) {
                     elem_begin_(begin, end, begin);
                 }
                 ++block_elem_end_;
             }
         }
 
-        // 参考emplace_front
+
         template<typename... V>
         constexpr T &emplace_back_pre_(::std::size_t const block_size, V &&... v) {
             auto const end = elem_end_end_;
             std::construct_at(end, ::std::forward<V>(v)...);
             elem_end_end_ = end + 1;
-            // 修正elem_begin
+
             if (block_size == 1) {
                 elem_begin_end_ = end + 1;
             }
             return *end;
         }
 
-        // 参考emplace_front
+
         template<typename... V>
         constexpr T &emplace_back_post_(::std::size_t const block_size, V &&... v) {
             auto const begin = ::std::to_address(*block_elem_end_);
             ::std::construct_at(begin, ::std::forward<V>(v)...);
             elem_end_(begin, begin + 1, begin + details::block_elements_v<T>);
             ++block_elem_end_;
-            // 修正elem_begin，如果先前为0，说明现在是1，修正elem_begin等于elem_end
+
             if (block_size == 0) {
                 elem_begin_(begin, begin + 1, begin);
             }
@@ -1625,7 +1618,7 @@ namespace fast_io::containers {
         }
 #endif
 
-        // 复制构造采取按结构复制的方法
+
         constexpr deque(deque const &other) {
             if (!other.empty()) {
                 construct_guard_ guard(this);
@@ -1717,7 +1710,6 @@ namespace fast_io::containers {
         }
 
     private:
-        // 几乎等于iterator的at，但具有检查和断言
         template<bool throw_exception = false>
         constexpr T &at_impl_(::std::size_t const pos) const noexcept(!throw_exception) {
             auto const front_size = static_cast<::std::size_t>(elem_begin_begin_ - elem_begin_first_);
@@ -1739,7 +1731,7 @@ namespace fast_io::containers {
             return *((*target_block) + elem_step);
         }
 
-        // 首块有空余时使用
+
         template<typename... V>
         constexpr T &emplace_front_pre_(::std::size_t const block_size, V &&... v) {
             auto const begin = ::std::to_address(elem_begin_begin_ - 1);
@@ -1754,7 +1746,7 @@ namespace fast_io::containers {
             return *begin;
         }
 
-        // 首块没有空余，切换到下一个块
+
         template<typename... V>
         constexpr T &emplace_front_post_(::std::size_t const block_size, V &&... v) {
             auto const block = block_elem_begin_ - 1;
@@ -1766,7 +1758,7 @@ namespace fast_io::containers {
         [[assume(block + 1 == block_elem_begin_)]];
 #endif
             --block_elem_begin_;
-            // 修正elem_end
+
             if (block_size == 0) {
                 elem_end_(end - 1, end, end);
             }
@@ -1801,10 +1793,9 @@ namespace fast_io::containers {
             return at_impl_(pos);
         }
 
-        // 不会失败且不移动元素
+
         constexpr void shrink_to_fit() noexcept {
-            if (block_alloc_size_() != 0) // 保证fill_block_alloc_end
-            {
+            if (block_alloc_size_() != 0) {
                 for (auto const i: ::std::ranges::subrange{block_alloc_begin_, block_elem_begin_}) {
                     dealloc_block_(i);
                 }
@@ -1832,8 +1823,7 @@ namespace fast_io::containers {
             emplace_front(::std::move(value));
         }
 
-        // 该函数调用后如果容器大小为0，则使得elem_begin/end为nullptr
-        // 这是emplace_back的先决条件
+
         constexpr void pop_back() noexcept {
             if (empty()) [[unlikely]] {
                 fast_terminate();
@@ -1858,7 +1848,7 @@ namespace fast_io::containers {
             }
         }
 
-        // 参考pop_back
+
         constexpr void pop_front() noexcept {
             if (empty()) [[unlikely]] {
                 fast_terminate();
@@ -1868,7 +1858,7 @@ namespace fast_io::containers {
             if (elem_begin_end_ == elem_begin_begin_) {
                 ++block_elem_begin_;
                 auto const block_size = block_elem_size_();
-                // 注意，如果就剩最后一个block，那么应该采用end的位置而不是计算得到
+
                 if (block_size == 1) {
                     elem_begin_(elem_end_begin_, elem_end_end_, elem_end_begin_);
                 } else if (block_size) {
@@ -1955,8 +1945,7 @@ namespace fast_io::containers {
             }
         };
 
-        // 用于范围构造，该函数不分配内存
-        // 需要在调用前reserve足够大
+
         template<typename... V>
         constexpr T &emplace_front_noalloc_(V &&... v) {
             auto const block_size = block_elem_size_();
@@ -1967,7 +1956,7 @@ namespace fast_io::containers {
             }
         }
 
-        // 见emplace_front_noalloc
+
         template<typename... V>
         constexpr T &emplace_back_noalloc_(V &&... v) {
             auto const block_size = block_elem_size_();
@@ -2105,9 +2094,8 @@ namespace fast_io::containers {
         }
 
     private:
-        // 收缩专用
         constexpr void resize_shrink_(::std::size_t const old_size, ::std::size_t const new_size) noexcept {
-            if (!(old_size >= new_size)) [[unlikely]] {
+            if (old_size < new_size) [[unlikely]] {
                 fast_terminate();
             }
             if constexpr (::std::is_trivially_destructible_v<T> && is_default_operation_) {
@@ -2152,7 +2140,6 @@ namespace fast_io::containers {
         }
 
     public:
-        // 注意必须调用clear，使得空容器的elem_begin/elem_end都为空指针
         constexpr void resize(::std::size_t const new_size) {
             new_size == 0 ? clear() : resize_unified_(new_size);
         }
@@ -2162,24 +2149,16 @@ namespace fast_io::containers {
         }
 
     private:
-        // 用于emplace的辅助函数，调用前需要判断方向
-        // 该函数将后半部分向后移动1个位置
-        // 从最后一个块开始
         constexpr void back_emplace_(Block *const block_curr, T *const elem_curr) {
             auto const block_end = block_elem_end_;
             auto const block_size = static_cast<::std::size_t>(block_end - block_curr) - 1;
-            // 每次移动时留下的空位
             auto last_elem = elem_end_begin_;
-            // 先记录尾块块尾位置
             auto end = elem_end_end_;
-            // 再emplace_back
             emplace_back_noalloc_(::std::move(back()));
-            // 如果大于一个块，那么移动整个尾块
             if (block_size > 0) {
                 auto const begin = last_elem;
                 ::std::ranges::move_backward(begin, end - 1, end);
             }
-            // 移动中间的块
             if (block_size > 1) {
                 auto target_block_end = block_end - 1;
                 for (; target_block_end != block_curr + 1;) {
@@ -2190,34 +2169,26 @@ namespace fast_io::containers {
                     last_elem = target_begin;
                     ::std::ranges::move_backward(target_begin, target_end - 1, target_end);
                 }
-            }
-            // 移动插入位置所在的块
-            {
-                // 如果插入位置就是尾块，那么采纳之前储存的end作为移动使用的end
+            } {
                 if (block_end - 1 != block_curr) {
-                    // 否则使用计算出来的end
                     end = ::std::to_address(*block_curr + details::block_elements_v<T>);
-                    // 将当前块的最后一个移动到上一个块的第一个
                     *last_elem = ::std::move(*(end - 1));
                 }
-                // 把插入位置所在块整体右移1
                 ::std::ranges::move_backward(elem_curr, end - 1, end);
             }
         }
 
-        // 将前半部分向前移动1
         constexpr void front_emplace_(Block *const block_curr, T *const elem_curr) {
             auto const block_begin = block_elem_begin_;
             auto const block_size = static_cast<::std::size_t>(block_curr - block_begin);
-            // 向前移动后尾部空出来的的后面一个位置
             auto const last_elem_begin = elem_begin_begin_;
             auto last_elem_end = elem_begin_end_;
             emplace_front_noalloc_(::std::move(front()));
-            // 如果block_curr是首个块，那么elem_curr就是终点
+
             if (block_begin == block_curr) {
                 last_elem_end = elem_curr;
             }
-            // 否则之前储存的last_elem_end是终点
+
             ::std::ranges::move(last_elem_begin + 1, last_elem_end, last_elem_begin);
             if (block_size > 1) {
                 auto target_block_begin = block_begin + 1;
@@ -2251,16 +2222,16 @@ namespace fast_io::containers {
                 emplace_front(::std::forward<Args>(args)...);
                 return begin();
             }
-            // 此时容器一定不为空
+
             auto const back_diff = static_cast<::std::size_t>(end_pre - pos);
             auto const front_diff = static_cast<::std::size_t>(pos - begin_pre);
             // NB:
-            // 如果args是当前容器的元素的引用，那么必须使得该元素先被emplace_back/front后再被移动到正确位置，否则该引用会失效，同时reserve不会导致引用失效
-            // 此处逻辑和无分配器版本稍微不一样
+
+
             if (back_diff <= front_diff || (block_elem_size_() == 1 && elem_end_end_ != elem_end_last_)) {
                 reserve_back_(2);
-                emplace_back_noalloc_(::std::forward<Args>(args)...); // 满足标准要求经过A::construct
-                // back_emplace向后移动1个元素并插入，因此先reserve以获得一个不失效的pos
+                emplace_back_noalloc_(::std::forward<Args>(args)...);
+
                 auto new_pos = begin() + static_cast<::std::ptrdiff_t>(front_diff);
                 back_emplace_(new_pos.block_elem_curr_, new_pos.elem_curr_);
                 *new_pos = ::std::move(back());
@@ -2333,7 +2304,7 @@ namespace fast_io::containers {
             }
         }
 
-        // 几乎等于insert_range,但是使用迭代器版本以支持input iterator
+
         template<::std::input_iterator U, typename V>
         constexpr iterator insert(const_iterator const pos, U first, V last) {
             if (first == last) {

@@ -49,7 +49,8 @@ public:
 
     ele &operator=(ele const &other) = default;
 
-    ~ele() {}
+    ~ele() {
+    }
 
     bool operator==(const std::size_t num) const {
         return data[0] == static_cast<unsigned char>(num);
@@ -208,11 +209,10 @@ void test_assign_range() {
     deque d{};
     auto ilist = {0uz, 1uz, 2uz, 3uz};
 
-    // 使用 requires 表达式进行特性检测
     if constexpr (requires { d.assign_range(ilist); }) {
-        d.assign_range(ilist); // C++23 风格
+        d.assign_range(ilist);
     } else {
-        d.assign(ilist.begin(), ilist.end()); // C++20 及以前的回退方案
+        d.assign(ilist.begin(), ilist.end());
     }
     assert(d.size() == 4uz);
 }
@@ -237,7 +237,6 @@ void test_clear() {
     assert(d.empty());
 }
 
-// todo: emplace、insert、insert_range、emplace、erase
 
 template<typename deque>
 void test_emplace_back(std::size_t count = 1000uz) {
@@ -339,30 +338,24 @@ void test_emplace_front(const std::size_t count = 1000uz) {
 // pop_back/pop_front tests in emplace_back/emplace_front
 
 template<typename deque>
-void test_prep_app_end_range() {
-    // 测试 append_range
-    {
+void test_prep_app_end_range() { {
         deque d{};
         auto range_to_append = std::views::iota(0uz, 100uz);
         if constexpr (requires { d.append_range(range_to_append); }) {
-            d.append_range(range_to_append); // C++23 风格
+            d.append_range(range_to_append);
         } else {
-            for (auto const &elem: range_to_append) // 回退
-            {
+            for (auto const &elem: range_to_append) {
                 d.push_back(elem);
             }
         }
         assert(d.size() == 100uz);
-    }
-    // 测试 prepend_range
-    {
+    } {
         deque d{};
         auto range_to_prepend = std::views::iota(0uz, 100uz);
         if constexpr (requires { d.prepend_range(range_to_prepend); }) {
-            d.prepend_range(range_to_prepend); // C++23 风格
+            d.prepend_range(range_to_prepend);
         } else {
-            for (auto const &elem: std::views::reverse(range_to_prepend)) // 回退
-            {
+            for (auto const &elem: std::views::reverse(range_to_prepend)) {
                 d.push_front(elem);
             }
         }
