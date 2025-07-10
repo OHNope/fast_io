@@ -12,15 +12,21 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
-    - name: Install ninja-build tool
-      uses: seanmiddleditch/gha-setup-ninja@v5
-    - name: cmake
-      run: cmake -GNinja . -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTS=On -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -Wall -Wextra -Wpedantic -Wmisleading-indentation -Wunused -Wuninitialized -Wshadow -Wconversion -Werror"
-    - name: ninja
-      run: ninja
-    - name: ninja test
-      run: ninja test
+      - uses: actions/checkout@v4
+      - name: Install latest stable GCC (GCC 14)
+        uses: egor-tensin/setup-g++@v3
+        with:
+          version: 15  # Pin to the current latest stable version
+          platform: x64
+      - name: Install ninja-build tool
+        uses: seanmiddleditch/gha-setup-ninja@v5
+      - name: cmake
+        run: cmake -GNinja . -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTS=On -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -Wall -Wextra -Wpedantic -Wmisleading-indentation -Wunused -Wuninitialized -Wshadow -Wconversion -Werror"
+      - name: ninja
+        run: ninja
+      - name: ninja test
+        run: ninja test
+
 
   windows:
 
