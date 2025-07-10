@@ -30,13 +30,9 @@ namespace fast_io::containers {
 #pragma clang diagnostic ignored "-Wc++26-extensions"
 #endif
         template<typename... Args>
-        inline constexpr auto get(Args &&... args) noexcept {
-            auto &first = args
-            ...
-            [0];
-            auto &second = args
-            ...
-            [1];
+        inline constexpr auto get_first_two(Args &&... args) noexcept {
+            auto &first = args...[0];
+            auto &second = args...[1];
             struct iter_ref_pair {
                 decltype(first) &begin;
                 decltype(second) &end;
@@ -100,374 +96,6 @@ namespace fast_io::containers {
             auto const new_pos = pos + front_size;
             return pos_t{new_pos / block_elems, new_pos % block_elems};
         }
-
-
-        template<typename T, typename Block>
-        class bucket_type;
-
-        template<typename T, typename Block>
-        class bucket_iterator {
-            using RConstT = ::std::remove_const_t<T>;
-
-            friend bucket_type<RConstT, Block>;
-            friend bucket_type<T, Block>;
-            friend bucket_iterator<T const, Block>;
-
-            Block *block_elem_begin_{};
-            Block *block_elem_end_{};
-            Block *block_elem_curr_{};
-            RConstT *elem_begin_begin_{};
-            RConstT *elem_begin_end_{};
-            RConstT *elem_end_begin_{};
-            RConstT *elem_end_end_{};
-            RConstT *elem_curr_begin_{};
-            RConstT *elem_curr_end_{};
-
-            constexpr bucket_iterator(Block *const block_elem_begin, Block *const block_elem_end,
-                                      Block *const block_elem_curr,
-                                      RConstT *const elem_begin_begin, RConstT *const elem_begin_end,
-                                      RConstT *const elem_end_begin, RConstT *const elem_end_end,
-                                      RConstT *const elem_curr_begin, RConstT *const elem_curr_end) noexcept
-                : block_elem_begin_(block_elem_begin), block_elem_end_(block_elem_end),
-                  block_elem_curr_(block_elem_curr),
-                  elem_begin_begin_(elem_begin_begin), elem_begin_end_(elem_begin_end), elem_end_begin_(elem_end_begin),
-                  elem_end_end_(elem_end_end), elem_curr_begin_(elem_curr_begin), elem_curr_end_(elem_curr_end) {
-            }
-
-            [[nodiscard]] constexpr bucket_iterator<RConstT, Block> remove_const_() const
-                requires(::std::is_const_v<T>) {
-                return {
-                    block_elem_begin_, block_elem_end_, block_elem_curr_, elem_begin_begin_, elem_begin_end_,
-                    elem_end_begin_, elem_end_end_, elem_curr_begin_, elem_curr_end_
-                };
-            }
-
-            constexpr bucket_iterator &plus_and_assign_(::std::ptrdiff_t const pos) noexcept {
-                block_elem_curr_ += pos;
-                if (block_elem_curr_ + 1 == block_elem_end_) {
-                    elem_curr_begin_ = elem_end_begin_;
-                    elem_curr_end_ = elem_end_end_;
-                } else if (block_elem_curr_ == block_elem_begin_) {
-                    elem_curr_begin_ = elem_begin_begin_;
-                    elem_curr_end_ = elem_begin_end_;
-                } else {
-                    elem_curr_begin_ = *block_elem_begin_;
-                    elem_curr_end_ = elem_begin_begin_ + block_elements_v<T>;
-                }
-                if (!(block_elem_curr_ < block_elem_end_ && block_elem_curr_ >= block_elem_begin_)) [[unlikely]] {
-                    fast_terminate();
-                }
-                return *this;
-            }
-
-        public:
-            using difference_type = ::std::ptrdiff_t;
-            using value_type = ::std::span<T>;
-            using pointer = value_type *;
-            using reference = value_type &;
-            using iterator_category = ::std::random_access_iterator_tag;
-
-            constexpr bucket_iterator() noexcept = default;
-
-            constexpr bucket_iterator(bucket_iterator const &other) noexcept = default;
-
-            constexpr bucket_iterator &operator=(bucket_iterator const &other) noexcept = default;
-
-            constexpr ~bucket_iterator() = default;
-
-            constexpr bucket_iterator &operator++() noexcept {
-                ++block_elem_curr_;
-                if (block_elem_curr_ + 1 == block_elem_end_) {
-                    elem_curr_begin_ = elem_end_begin_;
-                    elem_curr_end_ = elem_end_end_;
-                } else {
-                    elem_curr_begin_ = *block_elem_begin_;
-                    elem_curr_end_ = elem_begin_begin_ + block_elements_v<T>;
-                }
-                if (!(block_elem_curr_ < block_elem_end_)) [[unlikely]] {
-                    fast_terminate();
-                }
-                return *this;
-            }
-
-            constexpr bucket_iterator operator++(int) noexcept {
-#if defined(__cpp_auto_cast)
-                return ++auto{*this};
-#else
-                auto temp = *this;
-                ++temp;
-                return temp;
-#endif
-            }
-
-            constexpr bucket_iterator &operator--() noexcept {
-                --block_elem_curr_;
-                if (block_elem_curr_ == block_elem_begin_) {
-                    elem_curr_begin_ = elem_begin_begin_;
-                    elem_curr_end_ = elem_begin_end_;
-                } else {
-                    elem_begin_begin_ = *(block_elem_begin_ - 1);
-                    elem_begin_end_ = elem_begin_begin_ + block_elements_v<T>;
-                }
-                if (!(block_elem_curr_ >= block_elem_begin_)) [[unlikely]] {
-                    fast_terminate();
-                }
-                return *this;
-            }
-
-            constexpr bucket_iterator operator--(int) noexcept {
-#if defined(__cpp_auto_cast)
-                return --auto{*this};
-#else
-                auto temp = *this;
-                --temp;
-                return temp;
-#endif
-            }
-
-            constexpr bool operator==(bucket_iterator const &other) const noexcept {
-                return block_elem_curr_ == other.block_elem_curr_;
-            }
-
-            constexpr ::std::strong_ordering operator<=>(bucket_iterator const &other) const noexcept {
-                return block_elem_curr_ <=> other.block_elem_curr_;
-            }
-
-            constexpr ::std::ptrdiff_t operator-(bucket_iterator const &other) const noexcept {
-                return block_elem_curr_ - other.block_elem_curr_;
-            }
-
-            constexpr ::std::span<T> operator[](::std::ptrdiff_t const pos) {
-#if defined(__cpp_auto_cast)
-                return *(auto{*this} += pos);
-#else
-                auto temp = *this;
-                temp += pos;
-                return *temp;
-#endif
-            }
-
-            constexpr ::std::span<T> operator[](::std::ptrdiff_t const pos) const noexcept {
-#if defined(__cpp_auto_cast)
-                return *(auto{*this} += pos);
-#else
-                auto temp = *this;
-                temp += pos;
-                return *temp;
-#endif
-            }
-
-            constexpr value_type operator*() noexcept {
-                return {elem_curr_begin_, elem_curr_end_};
-            }
-
-            constexpr value_type operator*() const noexcept {
-                return {elem_curr_begin_, elem_curr_end_};
-            }
-
-            constexpr bucket_iterator &operator+=(::std::ptrdiff_t const pos) noexcept {
-                return plus_and_assign_(pos);
-            }
-
-            constexpr bucket_iterator &operator-=(::std::ptrdiff_t const pos) noexcept {
-                return plus_and_assign_(-pos);
-            }
-
-            friend constexpr bucket_iterator operator+(bucket_iterator const &it, ::std::ptrdiff_t const pos) noexcept {
-#if defined(__cpp_auto_cast)
-                return auto{it}.plus_and_assign_(pos);
-#else
-                auto temp = it;
-                temp.plus_and_assign_(pos);
-                return temp;
-#endif
-            }
-
-            friend constexpr bucket_iterator operator+(::std::ptrdiff_t const pos, bucket_iterator const &it) noexcept {
-                return it + pos;
-            }
-
-            friend constexpr bucket_iterator operator-(::std::ptrdiff_t const pos, bucket_iterator const &it) noexcept {
-                return it + (-pos);
-            }
-
-            friend constexpr bucket_iterator operator-(bucket_iterator const &it, ::std::ptrdiff_t pos) noexcept {
-                return it + (-pos);
-            }
-
-            constexpr explicit operator bucket_iterator<T const, Block>() const
-                requires(not::std::is_const_v<T>) {
-                return {
-                    block_elem_begin_, block_elem_end_, block_elem_curr_, elem_begin_begin_, elem_begin_end_,
-                    elem_end_begin_, elem_end_end_, elem_curr_begin_, elem_curr_end_
-                };
-            }
-        };
-
-#if !defined(NDEBUG)
-        static_assert(::std::random_access_iterator<bucket_iterator<int, int *> >);
-        static_assert(::std::random_access_iterator<bucket_iterator<const int, int *> >);
-#endif
-
-        template<typename T, typename Block>
-        class bucket_type : public ::std::ranges::view_interface<bucket_type<T, Block> > {
-            using RConstT = ::std::remove_const_t<T>;
-
-            template<::std::movable U, typename Allocator>
-            friend class ::fast_io::containers::deque;
-            friend bucket_type<::std::remove_const_t<T>, Block>;
-
-            Block *block_elem_begin_{};
-            Block *block_elem_end_{};
-            RConstT *elem_begin_begin_{};
-            RConstT *elem_begin_end_{};
-            RConstT *elem_end_begin_{};
-            RConstT *elem_end_end_{};
-
-            template<typename U, typename V>
-            constexpr bucket_type(U const block_elem_begin, U const block_elem_end, V const elem_begin_begin,
-                                  V const elem_begin_end, V const elem_end_begin, V const elem_end_end) noexcept
-                : block_elem_begin_(::std::to_address(block_elem_begin)),
-                  block_elem_end_(::std::to_address(block_elem_end)),
-                  elem_begin_begin_(::std::to_address(elem_begin_begin)),
-                  elem_begin_end_(::std::to_address(elem_begin_end)),
-                  elem_end_begin_(::std::to_address(elem_end_begin)), elem_end_end_(::std::to_address(elem_end_end)) {
-            }
-
-            [[nodiscard]] constexpr ::std::span<T> at_impl(::std::size_t const pos) const noexcept {
-                if (!(block_elem_begin_ + pos <= block_elem_end_)) [[unlikely]] {
-                    fast_terminate();
-                }
-                if (pos == 0) {
-                    return {elem_begin_begin_, elem_begin_end_};
-                } else if (block_elem_begin_ + pos + 1 == block_elem_end_) {
-                    return {elem_end_begin_, elem_end_end_};
-                } else {
-                    auto const begin = *(block_elem_begin_ + pos);
-                    return {begin, begin + block_elements_v<T>};
-                }
-            }
-
-        public:
-            using value_type = ::std::span<T>;
-            using pointer = value_type *;
-            using reference = value_type &;
-            using const_pointer = value_type const *;
-            using const_reference = value_type const &;
-            using size_type = ::std::size_t;
-            using difference_type = ::std::ptrdiff_t;
-            using iterator = bucket_iterator<T, Block>;
-            using const_iterator = bucket_iterator<T const, Block>;
-            using reverse_iterator = ::std::reverse_iterator<iterator>;
-            using const_reverse_iterator = ::std::reverse_iterator<const_iterator>;
-
-            constexpr bucket_type() = default;
-
-            constexpr ~bucket_type() = default;
-
-            constexpr bucket_type(bucket_type const &) = default;
-
-            constexpr bucket_type &operator=(bucket_type const &) = default;
-
-            constexpr ::std::size_t size() const noexcept {
-                return static_cast<::std::size_t>(block_elem_end_ - block_elem_begin_);
-            }
-
-            // empty and operator bool provided by view_interface
-
-            // Since bucket_iterator is not a continuous iterator,
-            // view_interface does not provide the member function data
-            // constexpr void data() const noexcept = delete;
-
-            constexpr ::std::span<T> front() const noexcept {
-                return {elem_begin_begin_, elem_begin_end_};
-            }
-
-            constexpr ::std::span<T const> front() noexcept
-                requires(not::std::is_const_v<T>) {
-                return {elem_begin_begin_, elem_begin_end_};
-            }
-
-            constexpr ::std::span<T> back() const noexcept {
-                return {elem_end_begin_, elem_end_end_};
-            }
-
-            constexpr ::std::span<T const> back() noexcept
-                requires(not::std::is_const_v<T>) {
-                return {elem_end_begin_, elem_end_end_};
-            }
-
-
-            constexpr const_iterator begin() const noexcept {
-                return {
-                    block_elem_begin_, block_elem_end_, block_elem_begin_, elem_begin_begin_, elem_begin_end_,
-                    elem_end_begin_, elem_end_end_, elem_begin_begin_, elem_begin_end_
-                };
-            }
-
-            constexpr const_iterator end() const noexcept {
-                if (block_elem_begin_ == block_elem_end_) {
-                    return {
-                        block_elem_begin_, block_elem_end_, block_elem_end_, elem_begin_begin_, elem_begin_end_,
-                        elem_end_begin_, elem_end_end_, elem_end_begin_, elem_end_end_
-                    };
-                } else {
-                    return {
-                        block_elem_begin_, block_elem_end_, block_elem_end_ - 1, elem_begin_begin_, elem_begin_end_,
-                        elem_end_begin_, elem_end_end_, elem_end_begin_, elem_end_end_
-                    };
-                }
-            }
-
-            constexpr iterator begin() noexcept {
-                return static_cast<bucket_type const &>(*this).begin().remove_const_();
-            }
-
-            constexpr iterator end() noexcept {
-                return static_cast<bucket_type const &>(*this).end().remove_const_();
-            }
-
-            constexpr const_iterator cbegin() const noexcept {
-                return begin();
-            }
-
-            constexpr const_iterator cend() const noexcept {
-                return end();
-            }
-
-            constexpr auto rbegin() noexcept {
-                return reverse_iterator{end()};
-            }
-
-            constexpr auto rend() noexcept {
-                return reverse_iterator{begin()};
-            }
-
-            constexpr auto rbegin() const noexcept {
-                return const_reverse_iterator{end()};
-            }
-
-            constexpr auto rend() const noexcept {
-                return const_reverse_iterator{begin()};
-            }
-
-            constexpr auto rcbegin() const noexcept {
-                return const_reverse_iterator{end()};
-            }
-
-            constexpr auto rcend() const noexcept {
-                return const_reverse_iterator{begin()};
-            }
-
-            constexpr operator bucket_type<T const, Block>() const
-                requires(not::std::is_const_v<T>) {
-                return {
-                    block_elem_begin_, block_elem_end_, elem_begin_begin_, elem_begin_end_, elem_end_begin_,
-                    elem_end_end_
-                };
-            }
-        };
-
 
         template<typename T, typename Block>
         class deque_iterator {
@@ -863,21 +491,7 @@ namespace fast_io::containers {
         using reverse_iterator = ::std::reverse_iterator<details::deque_iterator<T, Block> >;
         using const_iterator = details::deque_iterator<T const, Block>;
         using const_reverse_iterator = ::std::reverse_iterator<details::deque_iterator<T const, Block> >;
-        using bucket_type = details::bucket_type<T, Block>;
-        using const_bucket_type = details::bucket_type<T const, Block>;
         using allocator_type = allocator;
-
-        constexpr bucket_type buckets() noexcept {
-            return {
-                block_elem_begin_, block_elem_end_, elem_begin_begin_, elem_begin_end_, elem_end_begin_, elem_end_end_
-            };
-        }
-
-        constexpr const_bucket_type buckets() const noexcept {
-            return {
-                block_elem_begin_, block_elem_end_, elem_begin_begin_, elem_begin_end_, elem_end_begin_, elem_end_end_
-            };
-        }
 
         constexpr ~deque() {
             destroy_();
@@ -1266,57 +880,6 @@ namespace fast_io::containers {
             }
         }
 
-
-        template<bool move = false>
-        constexpr void copy_(const_bucket_type const other, ::std::size_t const block_size) {
-            if (block_size) {
-                auto const elem_size = other.elem_begin_end_ - other.elem_begin_begin_;
-                auto const first = *block_elem_end_;
-                auto const last = first + details::block_elements_v<T>;
-                auto const begin = last - elem_size;
-                if constexpr (move) {
-                    ::std::ranges::uninitialized_move(other.elem_begin_begin_, other.elem_begin_end_, begin,
-                                                      ::std::unreachable_sentinel);
-                } else {
-                    ::std::ranges::uninitialized_copy(other.elem_begin_begin_, other.elem_begin_end_, begin,
-                                                      ::std::unreachable_sentinel);
-                }
-                elem_begin_(begin, last, first);
-                elem_end_(begin, last, last);
-                ++block_elem_end_;
-            }
-            if (block_size > 2) {
-                for (auto const block_begin:
-                     ::std::ranges::subrange{other.block_elem_begin_ + 1, other.block_elem_end_ - 1}) {
-                    auto const begin = *block_elem_end_;
-                    auto const src_begin = block_begin;
-                    if constexpr (move) {
-                        ::std::ranges::uninitialized_move(src_begin, src_begin + details::block_elements_v<T>, begin,
-                                                          ::std::unreachable_sentinel);
-                    } else {
-                        ::std::ranges::uninitialized_copy(src_begin, src_begin + details::block_elements_v<T>, begin,
-                                                          ::std::unreachable_sentinel);
-                    }
-                    elem_end_(begin, begin + details::block_elements_v<T>, elem_end_last_);
-                    ++block_elem_end_;
-                }
-                elem_end_last_ = elem_end_end_;
-            }
-            if (block_size > 1) {
-                auto const begin = *block_elem_end_;
-                if constexpr (move) {
-                    ::std::ranges::uninitialized_move(other.elem_end_begin_, other.elem_end_end_, begin,
-                                                      ::std::unreachable_sentinel);
-                } else {
-                    ::std::ranges::uninitialized_copy(other.elem_end_begin_, other.elem_end_end_, begin,
-                                                      ::std::unreachable_sentinel);
-                }
-                elem_end_(begin, begin + (other.elem_end_end_ - other.elem_end_begin_),
-                          begin + details::block_elements_v<T>);
-                ++block_elem_end_;
-            }
-        }
-
         static consteval void is_iterator_(iterator const &) noexcept {
             /* */
         }
@@ -1366,7 +929,7 @@ namespace fast_io::containers {
                     }
                 } else if constexpr (sizeof...(Ts) == 2) {
 #if defined(__cpp_pack_indexing)
-                    auto [src_begin, src_end] = details::get(ts...);
+                    auto [src_begin, src_end] = details::get_first_two(ts...);
 #else
                     auto [src_begin, src_end] = details::get_first_two(::std::forward_as_tuple(ts...));
 #endif
@@ -1409,7 +972,7 @@ namespace fast_io::containers {
                         }
                     } else if constexpr (sizeof...(Ts) == 2) {
 #if defined(__cpp_pack_indexing)
-                        auto [src_begin, src_end] = details::get(ts...);
+                        auto [src_begin, src_end] = details::get_first_two(ts...);
 #else
                         auto [src_begin, src_end] = details::get_first_two(::std::forward_as_tuple(ts...));
 #endif
@@ -1451,7 +1014,7 @@ namespace fast_io::containers {
                     }
                 } else if constexpr (sizeof...(Ts) == 2) {
 #if defined(__cpp_pack_indexing)
-                    auto [src_begin, src_end] = details::get(ts...);
+                    auto [src_begin, src_end] = details::get_first_two(ts...);
 #else
                     auto [src_begin, src_end] = details::get_first_two(::std::forward_as_tuple(ts...));
 #endif
@@ -1540,34 +1103,6 @@ namespace fast_io::containers {
             }
         }
 
-        constexpr void from_range_noguard_(iterator &first, iterator &last) {
-            if (first != last) {
-                if (first.block_elem_curr_ == last.block_elem_curr_) {
-                    bucket_type bucket{
-                        first.block_elem_curr_, last.block_elem_curr_ + 1,
-                        first.elem_curr_, last.elem_curr_,
-                        last.elem_begin_, last.elem_begin_
-                    };
-                    auto const block_size = bucket.size();
-                    extent_block_(block_size);
-                    copy_(bucket, block_size);
-                } else {
-                    bucket_type bucket{
-                        first.block_elem_curr_, last.block_elem_curr_ + 1,
-                        first.elem_curr_, first.elem_begin_ + details::block_elements_v<T>,
-                        last.elem_begin_, last.elem_curr_
-                    };
-                    auto const block_size = bucket.size();
-                    extent_block_(block_size);
-                    copy_(bucket, block_size);
-                }
-            }
-        }
-
-        constexpr void from_range_noguard_(iterator &&first, iterator &&last) {
-            return from_range_noguard_(first, last);
-        }
-
         template<typename R>
         constexpr void from_range_noguard_(R &&rg) {
             if constexpr (requires { is_iterator_(::std::ranges::begin(rg)); }) {
@@ -1622,9 +1157,7 @@ namespace fast_io::containers {
         constexpr deque(deque const &other) {
             if (!other.empty()) {
                 construct_guard_ guard(this);
-                auto const block_size = other.block_elem_size_();
-                extent_block_(block_size);
-                copy_(other.buckets(), block_size);
+                from_range_noguard_(other.begin(), other.end());
                 guard.release();
             }
         }
@@ -1643,12 +1176,7 @@ namespace fast_io::containers {
 
         constexpr deque &operator=(const deque &other) {
             if (this != ::std::addressof(other)) {
-                clear();
-                if (!other.empty()) {
-                    auto const block_size = other.block_elem_size_();
-                    extent_block_(block_size);
-                    copy_(other.buckets(), block_size);
-                }
+                assign(other.begin(), other.end());
             }
             return *this;
         }
@@ -1754,7 +1282,11 @@ namespace fast_io::containers {
                 return emplace_front_post_(block_size, ::std::forward<V>(v)...);
             }
         }
-
+#if __has_cpp_attribute(__gnu__::__always_inline__)
+        [[__gnu__::__always_inline__]]
+#elif __has_cpp_attribute(msvc::forceinline)
+        [[msvc::forceinline]]
+#endif
         constexpr T &operator[](::std::size_t const pos) noexcept {
             auto const front_size = static_cast<::std::size_t>(elem_begin_begin_ - elem_begin_first_);
             auto const [block_step, elem_step] = details::calc_pos<T>(front_size, pos);
@@ -1770,7 +1302,11 @@ namespace fast_io::containers {
 
             return *((*target_block) + elem_step);
         }
-
+#if __has_cpp_attribute(__gnu__::__always_inline__)
+        [[__gnu__::__always_inline__]]
+#elif __has_cpp_attribute(msvc::forceinline)
+        [[msvc::forceinline]]
+#endif
         constexpr T const &operator[](::std::size_t const pos) const noexcept {
             auto const front_size = static_cast<::std::size_t>(elem_begin_begin_ - elem_begin_first_);
             auto const [block_step, elem_step] = details::calc_pos<T>(front_size, pos);
