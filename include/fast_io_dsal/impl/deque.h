@@ -12,7 +12,6 @@ namespace fast_io::containers {
             a.allocate(0);
         };
 
-
 #if not defined(__cpp_pack_indexing)
         template<typename Tuple>
         inline constexpr auto get_first_two(Tuple args) noexcept {
@@ -206,7 +205,11 @@ namespace fast_io::containers {
                 }
                 return *elem_curr_;
             }
-
+#if __has_cpp_attribute(__gnu__::__always_inline__)
+            [[__gnu__::__always_inline__]]
+#elif __has_cpp_attribute(msvc::forceinline)
+            [[msvc::forceinline]]
+#endif
             constexpr deque_iterator &operator++() noexcept {
                 if (!(elem_curr_ != elem_begin_ + details::block_elements_v<T>)) [[unlikely]] {
                     fast_terminate();
@@ -221,7 +224,11 @@ namespace fast_io::containers {
                 }
                 return *this;
             }
-
+#if __has_cpp_attribute(__gnu__::__always_inline__)
+            [[__gnu__::__always_inline__]]
+#elif __has_cpp_attribute(msvc::forceinline)
+            [[msvc::forceinline]]
+#endif
             constexpr deque_iterator operator++(int) noexcept {
 #if defined(__cpp_auto_cast)
                 return ++auto{*this};
@@ -231,7 +238,11 @@ namespace fast_io::containers {
                 return temp;
 #endif
             }
-
+#if __has_cpp_attribute(__gnu__::__always_inline__)
+            [[__gnu__::__always_inline__]]
+#elif __has_cpp_attribute(msvc::forceinline)
+            [[msvc::forceinline]]
+#endif
             constexpr deque_iterator &operator--() noexcept {
                 if (elem_curr_ == elem_begin_) {
                     --block_elem_curr_;
@@ -242,6 +253,11 @@ namespace fast_io::containers {
                 return *this;
             }
 
+#if __has_cpp_attribute(__gnu__::__always_inline__)
+            [[__gnu__::__always_inline__]]
+#elif __has_cpp_attribute(msvc::forceinline)
+            [[msvc::forceinline]]
+#endif
             constexpr deque_iterator operator--(int) noexcept {
 #if defined(__cpp_auto_cast)
                 return --auto{*this};
@@ -534,24 +550,41 @@ namespace fast_io::containers {
         static_assert(::std::sentinel_for<iterator, iterator>);
 #endif
 
+#if __has_cpp_attribute(__gnu__::__always_inline__)
+        [[__gnu__::__always_inline__]]
+#elif __has_cpp_attribute(msvc::forceinline)
+        [[msvc::forceinline]]
+#endif
         [[nodiscard]] constexpr const_iterator begin() const noexcept {
             if (block_elem_size_() == 0) {
                 return const_iterator{nullptr, nullptr, nullptr, nullptr};
             }
             return const_iterator{block_elem_begin_, block_elem_end_, *block_elem_begin_, elem_begin_begin_};
         }
-
+#if __has_cpp_attribute(__gnu__::__always_inline__)
+        [[__gnu__::__always_inline__]]
+#elif __has_cpp_attribute(msvc::forceinline)
+        [[msvc::forceinline]]
+#endif
         [[nodiscard]] constexpr const_iterator end() const noexcept {
             if (block_elem_size_() == 0) {
                 return const_iterator{nullptr, nullptr, nullptr, nullptr};
             }
             return const_iterator{block_elem_end_ - 1, block_elem_end_, *(block_elem_end_ - 1), elem_end_end_};
         }
-
+#if __has_cpp_attribute(__gnu__::__always_inline__)
+        [[__gnu__::__always_inline__]]
+#elif __has_cpp_attribute(msvc::forceinline)
+        [[msvc::forceinline]]
+#endif
         constexpr iterator begin() noexcept {
             return static_cast<const deque &>(*this).begin().remove_const_();
         }
-
+#if __has_cpp_attribute(__gnu__::__always_inline__)
+        [[__gnu__::__always_inline__]]
+#elif __has_cpp_attribute(msvc::forceinline)
+        [[msvc::forceinline]]
+#endif
         constexpr iterator end() noexcept {
             return static_cast<const deque &>(*this).end().remove_const_();
         }
@@ -718,7 +751,14 @@ namespace fast_io::containers {
                 ++block_alloc_end_;
             }
         }
+        constexpr void reallocate_control_block_for_back_expansion_(::std::size_t add_block_size) {
+            // 这里的逻辑就是原来 else 块里的内容
+            ctrl_alloc_ const ctrl{*this, block_alloc_size_() + add_block_size}; // may throw
+            ctrl.replace_ctrl_back();
 
+            // 别忘了，重分配后还需要扩展新的数据块
+            extent_block_back_uncond_(add_block_size);
+        }
 
         constexpr void reserve_back_(::std::size_t const add_elem_size) {
             auto const head_block_cap = static_cast<::std::size_t>(block_elem_begin_ - block_alloc_begin_) *
@@ -753,9 +793,10 @@ namespace fast_io::containers {
 
             if (ctrl_cap >= add_elem_size) {
                 align_elem_alloc_as_ctrl_back_(block_ctrl_begin_());
-            } else {
-                ctrl_alloc_ const ctrl{*this, block_alloc_size_() + add_block_size}; // may throw
-                ctrl.replace_ctrl_back();
+                extent_block_back_uncond_(add_block_size);
+            }
+            else [[unlikely]] {
+                reallocate_control_block_for_back_expansion_(add_block_size);
             }
             extent_block_back_uncond_(add_block_size);
         }
@@ -1030,8 +1071,12 @@ namespace fast_io::containers {
             }
         }
 
-
         template<typename... V>
+#if __has_cpp_attribute(__gnu__::__always_inline__)
+[[__gnu__::__always_inline__]]
+#elif __has_cpp_attribute(msvc::forceinline)
+[[msvc::forceinline]]
+#endif
         constexpr T &emplace_back_pre_(::std::size_t const block_size, V &&... v) {
             auto const end = elem_end_end_;
             std::construct_at(end, ::std::forward<V>(v)...);
@@ -1236,9 +1281,13 @@ namespace fast_io::containers {
             clear();
             from_range_noguard_(ilist.begin(), ilist.end());
         }
-
     private:
         template<typename... V>
+#if __has_cpp_attribute(__gnu__::__always_inline__)
+[[__gnu__::__always_inline__]]
+#elif __has_cpp_attribute(msvc::forceinline)
+[[msvc::forceinline]]
+#endif
         constexpr T &emplace_front_pre_(::std::size_t const block_size, V &&... v) {
             auto const begin = ::std::to_address(elem_begin_begin_ - 1);
             ::std::construct_at(begin, ::std::forward<V>(v)...); //may throw
