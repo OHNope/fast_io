@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <limits>
 #include <memory>
+#include <ranges>
 
 #include "../fast_io_core_impl/freestanding/impl.h"
 #include "../fast_io_core_impl/terminate.h"

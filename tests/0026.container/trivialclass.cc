@@ -49,7 +49,7 @@ public:
 
     ele &operator=(ele const &other) = default;
 
-    ~ele() = default;
+    ~ele() {}
 
     bool operator==(const std::size_t num) const {
         return data[0] == static_cast<unsigned char>(num);
@@ -71,7 +71,7 @@ void test_constructor(std::size_t count = 1000uz) {
             deque d(i + 1uz);
             assert(d.size() == (i + 1uz));
             assert(!d.empty());
-            for (auto [idx, v]: my_ranges::enumerate(d)) {
+            for ([[maybe_unused]] auto [idx, v]: my_ranges::enumerate(d)) {
                 assert(d[idx] == 0uz);
                 assert(v == 0uz);
             }
@@ -82,7 +82,7 @@ void test_constructor(std::size_t count = 1000uz) {
         for (auto i = 0uz; i != count; ++i) {
             deque d(i + 1uz, 0x7Euz);
             assert(d.size() == (i + 1uz));
-            for (auto [idx, v]: my_ranges::enumerate(d)) {
+            for ([[maybe_unused]] auto [idx, v]: my_ranges::enumerate(d)) {
                 assert(d[idx] == 0x7Euz);
                 assert(v == 0x7Euz);
             }
@@ -94,11 +94,11 @@ void test_constructor(std::size_t count = 1000uz) {
             assert(d.size() == (i + 1uz));
             deque d1(d.begin(), d.end());
             assert(d1.size() == (i + 1uz));
-            for (auto [idx, ele]: my_ranges::enumerate(d)) {
+            for ([[maybe_unused]] auto [idx, ele]: my_ranges::enumerate(d)) {
                 assert(d[idx] == 0x7Euz);
                 assert(ele == 0x7Euz);
             }
-            for (auto [idx, ele]: my_ranges::enumerate(d1)) {
+            for ([[maybe_unused]] auto [idx, ele]: my_ranges::enumerate(d1)) {
                 assert(d1[idx] == 0x7Euz);
                 assert(ele == 0x7Euz);
             }
@@ -106,22 +106,18 @@ void test_constructor(std::size_t count = 1000uz) {
         }
         // (6) equivalent to (4), (5) and operator= (1)
         {
-#if __cplusplus >= 202302L
-            std::vector<typename deque::value_type> v{std::from_range, std::ranges::iota_view(0uz, count)};
-            deque d(std::from_range, v);
-            assert(d.size() == count);
-            deque d1(std::from_range, std::ranges::subrange(v.begin(), v.end()));
-            assert(d1.size() == count);
-#else
             auto iota_r = std::ranges::iota_view(0uz, count);
-            std::vector<typename deque::value_type> v(iota_r.begin(), iota_r.end());
+            std::vector<typename deque::value_type> v;
+            v.reserve(count);
+            for (auto val: iota_r) {
+                v.emplace_back(val);
+            }
             deque d(v.begin(), v.end());
             assert(d.size() == count);
 
             auto sub_r = std::ranges::subrange(v.begin(), v.end());
             deque d1(sub_r.begin(), sub_r.end());
             assert(d1.size() == count);
-#endif
         }
         // (7) equivalent to (5)
         {
@@ -147,17 +143,17 @@ void test_operator_assign(std::size_t count = 1000uz) {
     // (1) equivalent to copy constructor (7)
     {
         for (auto i = 0uz; i != count; ++i) {
-#if __cplusplus >= 202302L
-            deque d(std::from_range, std::ranges::iota_view(0uz, i + 1uz));
-#else
+            // Revised
             auto iota_r = std::ranges::iota_view(0uz, i + 1uz);
-            deque d(iota_r.begin(), iota_r.end());
-#endif
+            deque d;
+            for (auto val: iota_r) {
+                d.emplace_back(val);
+            }
 
             deque d1(100uz);
             d1 = d;
             assert(d.size() == (i + 1uz));
-            for (auto [idx, v]: my_ranges::enumerate(d1)) {
+            for ([[maybe_unused]] auto [idx, v]: my_ranges::enumerate(d1)) {
                 assert(d[idx] == idx);
                 assert(v == idx);
             }
@@ -211,11 +207,13 @@ template<typename deque>
 void test_assign_range() {
     deque d{};
     auto ilist = {0uz, 1uz, 2uz, 3uz};
-#if __cplusplus >= 202302L
-    d.assign_range(ilist);
-#else
-    d.assign(ilist.begin(), ilist.end());
-#endif
+
+    // 使用 requires 表达式进行特性检测
+    if constexpr (requires { d.assign_range(ilist); }) {
+        d.assign_range(ilist); // C++23 风格
+    } else {
+        d.assign(ilist.begin(), ilist.end()); // C++20 及以前的回退方案
+    }
     assert(d.size() == 4uz);
 }
 
@@ -262,12 +260,11 @@ void test_emplace_back(std::size_t count = 1000uz) {
         }
         for (auto i = 0uz; i != count; ++i) {
             auto const half_head = (i + 1uz) / 2uz;
-#if  __cplusplus >= 202302L
-            deque d{std::from_range, std::ranges::iota_view(0uz, half_head)};
-#else
             auto iota_r = std::ranges::iota_view(0uz, half_head);
-            deque d(iota_r.begin(), iota_r.end());
-#endif
+            deque d;
+            for (auto val: iota_r) {
+                d.emplace_back(val);
+            }
 
             for (auto j = half_head; j != i; ++j) {
                 d.emplace_back(j);
@@ -296,7 +293,7 @@ void test_emplace_front(const std::size_t count = 1000uz) {
                 assert(d[0uz] == i - j - 1uz);
                 assert(d.size() == (j + 1uz));
             }
-            for (auto [idx, v]: my_ranges::enumerate(d)) {
+            for ([[maybe_unused]] auto [idx, v]: my_ranges::enumerate(d)) {
                 assert(d[idx] == idx);
                 assert(v == idx);
             }
@@ -311,19 +308,19 @@ void test_emplace_front(const std::size_t count = 1000uz) {
         }
         for (auto i = 0uz; i != count; ++i) {
             auto const half_head = (i + 1uz) / 2uz;
-#if __cplusplus >= 202302L
-            deque d{std::from_range, std::ranges::iota_view(half_head, i)};
-#else
+            // Revised
             auto iota_r = std::ranges::iota_view(half_head, i);
-            deque d(iota_r.begin(), iota_r.end());
-#endif
+            deque d;
+            for (auto val: iota_r) {
+                d.emplace_back(val);
+            }
 
             for (unsigned long j = 0; j != half_head; ++j) {
                 d.emplace_front(half_head - j - 1uz);
                 assert(d.size() == ((i - half_head) + j + 1uz));
                 assert(d[0uz] == half_head - j - 1uz);
             }
-            for (auto [idx, v]: my_ranges::enumerate(d)) {
+            for ([[maybe_unused]] auto [idx, v]: my_ranges::enumerate(d)) {
                 assert(d[idx] == idx);
                 assert(v == idx);
             }
@@ -343,24 +340,32 @@ void test_emplace_front(const std::size_t count = 1000uz) {
 
 template<typename deque>
 void test_prep_app_end_range() {
-    // equivlent to emplace_back/emplace_front
+    // 测试 append_range
     {
         deque d{};
         auto range_to_append = std::views::iota(0uz, 100uz);
-#if __cplusplus >= 202302L
-        d.append_range(range_to_append);
-#else
-        d.insert(d.end(), range_to_append.begin(), range_to_append.end());
-#endif
+        if constexpr (requires { d.append_range(range_to_append); }) {
+            d.append_range(range_to_append); // C++23 风格
+        } else {
+            for (auto const &elem: range_to_append) // 回退
+            {
+                d.push_back(elem);
+            }
+        }
         assert(d.size() == 100uz);
-    } {
+    }
+    // 测试 prepend_range
+    {
         deque d{};
         auto range_to_prepend = std::views::iota(0uz, 100uz);
-#if __cplusplus >= 202302L
-        d.prepend_range(range_to_prepend);
-#else
-        d.insert(d.begin(), range_to_prepend.begin(), range_to_prepend.end());
-#endif
+        if constexpr (requires { d.prepend_range(range_to_prepend); }) {
+            d.prepend_range(range_to_prepend); // C++23 风格
+        } else {
+            for (auto const &elem: std::views::reverse(range_to_prepend)) // 回退
+            {
+                d.push_front(elem);
+            }
+        }
         assert(d.size() == 100uz);
     }
 }
@@ -436,19 +441,17 @@ void test_all(std::size_t count = 1000uz) {
     test_emplace_insert<deque<Type> >();
 }
 
-struct metaindex
-{
-	::std::size_t modulepos{SIZE_MAX},moduleroutinepos{SIZE_MAX};
+struct metaindex {
+    ::std::size_t modulepos{SIZE_MAX}, moduleroutinepos{SIZE_MAX};
 };
 
-int main()
-{
-	::fast_io::vector<::fast_io::vector<metaindex>> vec;
-	vec.emplace_back(30);
+int main() {
+    ::fast_io::vector<::fast_io::vector<metaindex> > vec;
+    vec.emplace_back(30);
 
-	auto& vec20{vec[0]};
-	vec20.push_back(metaindex{20,30});
-::fast_io::deque<int> d(10);
+    auto &vec20{vec[0]};
+    vec20.push_back(metaindex{20, 30});
+    ::fast_io::deque<int> d(10);
 
     test_all<ele<1uz> >();
     test_all<ele<2uz> >();

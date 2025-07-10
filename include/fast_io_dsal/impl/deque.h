@@ -1114,7 +1114,7 @@ namespace fast_io::containers {
             auto const tail_block_cap = static_cast<::std::size_t>(block_alloc_end_ - block_elem_end_) *
                                         details::block_elements_v<T>;
             // 尾块的已使用大小
-            auto const tail_cap = static_cast<::std::size_t>(elem_end_last_ - elem_end_end_) ;
+            auto const tail_cap = static_cast<::std::size_t>(elem_end_last_ - elem_end_end_);
             // non_move_cap为尾部-尾部已用，不移动块时cap
             auto const non_move_cap = tail_block_cap + tail_cap;
             // 首先如果cap足够，则不需要分配新block
@@ -1178,7 +1178,7 @@ namespace fast_io::containers {
             auto const tail_block_alloc_cap = static_cast<::std::size_t>(block_alloc_end_ - block_elem_end_) *
                                               details::block_elements_v<T>;
             // 头块的已使用大小
-            auto const head_cap = static_cast<::std::size_t>(elem_begin_begin_ - elem_begin_first_) ;
+            auto const head_cap = static_cast<::std::size_t>(elem_begin_begin_ - elem_begin_first_);
             // non_move_cap为头部-头部已用，不移动块时cap
             auto const non_move_cap = head_block_alloc_cap + head_cap;
             // 首先如果cap足够，则不需要分配新block
@@ -1387,8 +1387,8 @@ namespace fast_io::containers {
                 ++block_elem_end_;
             }
             if (full_blocks > 1) {
-                for (::std::size_t i {0};
-                i != full_blocks - 1; ++i) {
+                for (::std::size_t i{0};
+                     i != full_blocks - 1; ++i) {
                     auto const begin = *block_elem_end_;
                     auto const end = begin + details::block_elements_v<T>;
                     if constexpr (sizeof...(Ts) == 0) {
@@ -1615,7 +1615,7 @@ namespace fast_io::containers {
             from_range_noguard_(::std::move(first), ::std::move(last));
             guard.release();
         }
-#if defined(__cpp_lib_containers_ranges)
+#if (defined(__cpp_lib_from_range) && __cpp_lib_from_range >= 202207L) || __cplusplus > 202002L
         template<::std::ranges::input_range R>
             requires ::std::convertible_to<::std::ranges::range_value_t<R>, T>
         constexpr deque(::std::from_range_t, R &&rg) {
@@ -2167,7 +2167,7 @@ namespace fast_io::containers {
         // 从最后一个块开始
         constexpr void back_emplace_(Block *const block_curr, T *const elem_curr) {
             auto const block_end = block_elem_end_;
-            auto const block_size = static_cast<::std::size_t>( block_end - block_curr) - 1;
+            auto const block_size = static_cast<::std::size_t>(block_end - block_curr) - 1;
             // 每次移动时留下的空位
             auto last_elem = elem_end_begin_;
             // 先记录尾块块尾位置
@@ -2208,7 +2208,7 @@ namespace fast_io::containers {
         // 将前半部分向前移动1
         constexpr void front_emplace_(Block *const block_curr, T *const elem_curr) {
             auto const block_begin = block_elem_begin_;
-            auto const block_size = static_cast<::std::size_t>(block_curr - block_begin) ;
+            auto const block_size = static_cast<::std::size_t>(block_curr - block_begin);
             // 向前移动后尾部空出来的的后面一个位置
             auto const last_elem_begin = elem_begin_begin_;
             auto last_elem_end = elem_begin_end_;
@@ -2252,8 +2252,8 @@ namespace fast_io::containers {
                 return begin();
             }
             // 此时容器一定不为空
-            auto const back_diff = static_cast<::std::size_t>(end_pre - pos) ;
-            auto const front_diff = static_cast<::std::size_t>(pos - begin_pre) ;
+            auto const back_diff = static_cast<::std::size_t>(end_pre - pos);
+            auto const front_diff = static_cast<::std::size_t>(pos - begin_pre);
             // NB:
             // 如果args是当前容器的元素的引用，那么必须使得该元素先被emplace_back/front后再被移动到正确位置，否则该引用会失效，同时reserve不会导致引用失效
             // 此处逻辑和无分配器版本稍微不一样
@@ -2316,8 +2316,8 @@ namespace fast_io::containers {
                 prepend_range_noguard_(::std::forward<R>(rg));
                 return begin();
             }
-            auto const back_diff = end_pre - pos ;
-            auto const front_diff = pos - begin_pre ;
+            auto const back_diff = end_pre - pos;
+            auto const front_diff = pos - begin_pre;
 
             if (back_diff <= front_diff) {
                 auto const old_size = size();
@@ -2350,8 +2350,8 @@ namespace fast_io::containers {
                 prepend_range_noguard_(::std::forward<U>(first), ::std::forward<V>(last));
                 return begin();
             }
-            auto const back_diff = end_pre - pos ;
-            auto const front_diff = pos - begin_pre ;
+            auto const back_diff = end_pre - pos;
+            auto const front_diff = pos - begin_pre;
             if (back_diff <= front_diff) {
                 auto const old_size = size();
                 append_range_noguard_(::std::forward<U>(first), ::std::forward<V>(last));
@@ -2371,11 +2371,12 @@ namespace fast_io::containers {
         }
 
         constexpr iterator insert(const_iterator const pos, ::std::size_t const count, T const &value) {
-#if __cplusplus >= 202302L
+#if defined(__cpp_lib_ranges_repeat) && __cpp_lib_ranges_repeat >= 202207L && (!defined(__GNUC__) || __GNUC__ >= 15)
             return insert_range(pos, ::std::ranges::views::repeat(value, count));
 #else
-            auto repeat_view = std::ranges::views::iota(0u, count)
-                          | std::ranges::views::transform([&](auto) { return value; });
+            auto iota_v = ::std::ranges::iota_view(static_cast<::std::size_t>(0), count);
+            auto transform_func = [&](auto) -> T const & { return value; };
+            auto repeat_view = ::std::ranges::transform_view(iota_v, transform_func);
             return insert_range(pos, repeat_view);
 #endif
         }
@@ -2391,8 +2392,8 @@ namespace fast_io::containers {
                 pop_back();
                 return end();
             }
-            auto const back_diff = end_pre - pos ;
-            auto const front_diff = pos - begin_pre ;
+            auto const back_diff = end_pre - pos;
+            auto const front_diff = pos - begin_pre;
             if (back_diff <= front_diff) {
                 ::std::ranges::move((pos + 1).remove_const_(), end(), pos.remove_const_());
                 pop_back();
@@ -2415,8 +2416,8 @@ namespace fast_io::containers {
                 pop_back_n_(last - first);
                 return end();
             }
-            auto const back_diff = end_pre - last ;
-            auto const front_diff = first - begin_pre ;
+            auto const back_diff = end_pre - last;
+            auto const front_diff = first - begin_pre;
             if (back_diff <= front_diff) {
                 ::std::ranges::move(last, end(), first.remove_const_());
                 pop_back_n_(last - first);
