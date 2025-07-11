@@ -509,6 +509,74 @@ namespace fast_io::containers {
         using const_reverse_iterator = ::std::reverse_iterator<details::deque_iterator<T const, Block> >;
         using allocator_type = allocator;
 
+        constexpr deque() noexcept(::std::is_nothrow_default_constructible_v<allocator>)
+            requires ::std::default_initializable<allocator>
+        = default;
+
+        explicit constexpr deque(allocator const & /*alloc*/) noexcept
+            requires ::std::default_initializable<allocator> {
+        }
+
+        constexpr deque(deque const &other, allocator const & /*alloc*/) : deque(other) {
+        }
+
+        constexpr deque(deque &&other, allocator const & /*alloc*/) noexcept : deque(::std::move(other)) {
+        }
+
+        explicit constexpr deque(::std::size_t const count) {
+            auto const [block_size, full_blocks, rem_elems] = details::calc_cap<T>(count);
+            construct_guard_ guard(this);
+            extent_block_(block_size);
+            construct_(full_blocks, rem_elems);
+            guard.release();
+        }
+
+        constexpr deque(::std::size_t const count, T const &t) {
+            auto const [block_size, full_blocks, rem_elems] = details::calc_cap<T>(count);
+            construct_guard_ guard(this);
+            extent_block_(block_size);
+            construct_(full_blocks, rem_elems, t);
+            guard.release();
+        }
+
+        template<::std::input_iterator U, typename V>
+        constexpr deque(U first, V last) {
+            construct_guard_ guard(this);
+            from_range_noguard_(::std::move(first), ::std::move(last));
+            guard.release();
+        }
+#if (defined(__cpp_lib_from_range) && __cpp_lib_from_range >= 202207L) || __cplusplus > 202002L
+        template<::std::ranges::input_range R>
+            requires ::std::convertible_to<::std::ranges::range_value_t<R>, T>
+        constexpr deque(::std::from_range_t, R &&rg) {
+            construct_guard_ guard(this);
+            from_range_noguard_(rg);
+            guard.release();
+        }
+#endif
+
+
+        constexpr deque(deque const &other) {
+            if (!other.empty()) {
+                construct_guard_ guard(this);
+                from_range_noguard_(other.begin(), other.end());
+                guard.release();
+            }
+        }
+
+        constexpr deque(deque &&other) noexcept {
+            other.swap(*this);
+        }
+
+        explicit constexpr deque(::std::initializer_list<T> const ilist) {
+            if (ilist.size()) {
+                construct_guard_ guard(this);
+                from_range_noguard_(ilist.begin(), ilist.end());
+                guard.release();
+            }
+        }
+
+
         constexpr ~deque() {
             destroy_();
         }
@@ -623,6 +691,440 @@ namespace fast_io::containers {
 
         [[nodiscard]] static constexpr allocator_type get_allocator() noexcept {
             return allocator_type{};
+        }
+
+        template<typename... V>
+        constexpr T &emplace_back(V &&... v) {
+            auto const block_size = block_elem_size_();
+            if (elem_end_end_ != elem_end_last_) {
+                return emplace_back_pre_(block_size, ::std::forward<V>(v)...);
+            } else {
+                reserve_one_back_();
+                return emplace_back_post_(block_size, ::std::forward<V>(v)...);
+            }
+        }
+
+        constexpr deque &operator=(const deque &other) {
+            if (this != ::std::addressof(other)) {
+                assign(other.begin(), other.end());
+            }
+            return *this;
+        }
+
+        constexpr deque &operator=(::std::initializer_list<T> ilist) {
+            clear();
+            if (ilist.size()) {
+                auto const [block_size, full_blocks, rem_elems] = details::calc_cap<T>(ilist.size());
+                extent_block_(block_size);
+                construct_(full_blocks, rem_elems, ::std::ranges::begin(ilist), ::std::ranges::end(ilist));
+            }
+            return *this;
+        }
+
+        constexpr deque &operator=(deque &&other) noexcept {
+            if (this == &other) {
+                return *this;
+            }
+            other.swap(*this);
+            return *this;
+        }
+
+        constexpr void assign_range(deque &&d) {
+            *this = ::std::move(d);
+        }
+
+        constexpr void assign_range(deque const &d) {
+            *this = d;
+        }
+
+        template<::std::ranges::input_range R>
+            requires ::std::convertible_to<::std::ranges::range_value_t<R>, T>
+        constexpr void assign_range(R &&rg) {
+            clear();
+            from_range_noguard_(::std::forward<R>(rg));
+        }
+
+        constexpr void assign(::std::size_t const count, T const &value) {
+            clear();
+            if (count) {
+                auto const [block_size, full_blocks, rem_elems] = details::calc_cap<T>(count);
+                extent_block_(block_size);
+                construct_(full_blocks, rem_elems, value);
+            }
+            /*
+            assign_range(::std::ranges::views::repeat(value, count));
+            */
+        }
+
+        template<::std::input_iterator U, typename V>
+        constexpr void assign(U first, V last) {
+            clear();
+            from_range_noguard_(::std::move(first), ::std::move(last));
+        }
+
+        constexpr void assign(::std::initializer_list<T> const ilist) {
+            clear();
+            from_range_noguard_(ilist.begin(), ilist.end());
+        }
+
+        template<typename... V>
+        constexpr T &emplace_front(V &&... v) {
+            auto const block_size = block_elem_size_();
+            if (elem_begin_begin_ != elem_begin_first_) {
+                return emplace_front_pre_(block_size, ::std::forward<V>(v)...);
+            } else {
+                reserve_one_front_();
+                return emplace_front_post_(block_size, ::std::forward<V>(v)...);
+            }
+        }
+#if __has_cpp_attribute(__gnu__::__always_inline__)
+        [[__gnu__::__always_inline__]]
+#elif __has_cpp_attribute(msvc::forceinline)
+        [[msvc::forceinline]]
+#endif
+        constexpr T &operator[](::std::size_t const pos) noexcept {
+            auto const front_size = static_cast<::std::size_t>(elem_begin_begin_ - elem_begin_first_);
+            auto const [block_step, elem_step] = details::calc_pos<T>(front_size, pos);
+            auto const target_block = block_elem_begin_ + block_step;
+            auto const check_block = target_block < block_elem_end_;
+            auto const check_elem = (target_block + 1 == block_elem_end_)
+                                        ? (::std::to_address(*target_block) + elem_step < elem_end_end_)
+                                        : true;
+
+            if (!(check_block && check_elem)) [[unlikely]] {
+                fast_terminate();
+            }
+
+            return *((*target_block) + elem_step);
+        }
+#if __has_cpp_attribute(__gnu__::__always_inline__)
+        [[__gnu__::__always_inline__]]
+#elif __has_cpp_attribute(msvc::forceinline)
+        [[msvc::forceinline]]
+#endif
+        constexpr T const &operator[](::std::size_t const pos) const noexcept {
+            auto const front_size = static_cast<::std::size_t>(elem_begin_begin_ - elem_begin_first_);
+            auto const [block_step, elem_step] = details::calc_pos<T>(front_size, pos);
+            auto const target_block = block_elem_begin_ + block_step;
+            auto const check_block = target_block < block_elem_end_;
+            auto const check_elem = (target_block + 1 == block_elem_end_)
+                                        ? (::std::to_address(*target_block) + elem_step < elem_end_end_)
+                                        : true;
+
+            if (!(check_block && check_elem)) [[unlikely]] {
+                fast_terminate();
+            }
+
+            return *((*target_block) + elem_step);
+        }
+
+        constexpr void shrink_to_fit() noexcept {
+            if (block_alloc_size_() != 0) {
+                for (auto const i: ::std::ranges::subrange{block_alloc_begin_, block_elem_begin_}) {
+                    dealloc_block_(i);
+                }
+                block_alloc_begin_ = block_elem_begin_;
+                for (auto const i: ::std::ranges::subrange{block_elem_end_, block_alloc_end_}) {
+                    dealloc_block_(i);
+                }
+                block_alloc_end_ = block_elem_end_;
+            }
+        }
+
+        constexpr void push_back(T const &t) {
+            emplace_back(t);
+        }
+
+        constexpr void push_back(T &&t) {
+            emplace_back(::std::move(t));
+        }
+
+        constexpr void push_front(T const &value) {
+            emplace_front(value);
+        }
+
+        constexpr void push_front(T &&value) {
+            emplace_front(::std::move(value));
+        }
+
+
+        constexpr void pop_back() noexcept {
+            if (empty()) [[unlikely]] {
+                fast_terminate();
+            }
+            --elem_end_end_;
+            ::std::destroy_at(elem_end_begin_);
+            if (elem_end_end_ == elem_end_begin_) {
+                --block_elem_end_;
+                auto const block_size = block_elem_size_();
+                if (block_size == 1) {
+                    elem_end_(elem_begin_begin_, elem_begin_end_, elem_begin_end_);
+                } else if (block_size) {
+                    auto const begin = *(block_elem_end_ - 1);
+                    auto const last = begin + details::block_elements_v<T>;
+                    elem_end_(begin, last, last);
+                } else {
+                    elem_begin_(nullptr, nullptr, nullptr);
+                    elem_end_(nullptr, nullptr, nullptr);
+                }
+            } else if (block_elem_size_() == 1) {
+                --elem_begin_end_;
+            }
+        }
+
+
+        constexpr void pop_front() noexcept {
+            if (empty()) [[unlikely]] {
+                fast_terminate();
+            }
+            ::std::destroy_at(elem_begin_begin_);
+            ++elem_begin_begin_;
+            if (elem_begin_end_ == elem_begin_begin_) {
+                ++block_elem_begin_;
+                auto const block_size = block_elem_size_();
+
+                if (block_size == 1) {
+                    elem_begin_(elem_end_begin_, elem_end_end_, elem_end_begin_);
+                } else if (block_size) {
+                    auto const begin = *block_elem_begin_;
+                    auto const last = begin + details::block_elements_v<T>;
+                    elem_begin_(begin, last, begin);
+                } else {
+                    elem_begin_(nullptr, nullptr, nullptr);
+                    elem_end_(nullptr, nullptr, nullptr);
+                }
+            } else if (block_elem_size_() == 1) {
+                ++elem_end_begin_;
+            }
+        }
+
+        constexpr T &front() noexcept {
+            if (empty()) [[unlikely]] {
+                fast_terminate();
+            }
+            return *(elem_begin_begin_);
+        }
+
+        constexpr T &back() noexcept {
+            if (empty()) [[unlikely]] {
+                fast_terminate();
+            }
+            return *(elem_end_end_ - 1);
+        }
+
+        constexpr T const &front() const noexcept {
+            if (empty()) [[unlikely]] {
+                fast_terminate();
+            }
+            return *(elem_begin_begin_);
+        }
+
+        constexpr T const &back() const noexcept {
+            if (empty()) [[unlikely]] {
+                fast_terminate();
+            }
+            return *(elem_end_end_ - 1);
+        }
+
+        template<::std::ranges::input_range R>
+            requires ::std::convertible_to<::std::ranges::range_value_t<R>, T>
+        constexpr void append_range(R &&rg) {
+            partial_guard_<true> guard(this, size());
+            append_range_noguard_(::std::forward<R>(rg));
+            guard.release();
+        }
+
+        template<::std::ranges::input_range R>
+            requires ::std::convertible_to<::std::ranges::range_value_t<R>, T>
+        constexpr void prepend_range(R &&rg) {
+            auto const old_size = size();
+            partial_guard_<false> guard(this, old_size);
+            prepend_range_noguard_(::std::forward<R>(rg));
+            guard.release();
+        }
+
+        constexpr void resize(::std::size_t const new_size) {
+            new_size == 0 ? clear() : resize_unified_(new_size);
+        }
+
+        constexpr void resize(::std::size_t const new_size, T const &t) {
+            new_size == 0 ? clear() : resize_unified_(new_size, t);
+        }
+
+        template<typename... Args>
+        constexpr iterator emplace(const_iterator const pos, Args &&... args) {
+            auto const begin_pre = begin();
+            auto const end_pre = end();
+            if (pos == end_pre) {
+                emplace_back(::std::forward<Args>(args)...);
+                return end() - 1;
+            }
+            if (pos == begin_pre) {
+                emplace_front(::std::forward<Args>(args)...);
+                return begin();
+            }
+
+            auto const back_diff = static_cast<::std::size_t>(end_pre - pos);
+            auto const front_diff = static_cast<::std::size_t>(pos - begin_pre);
+            // NB:
+
+
+            if (back_diff <= front_diff || (block_elem_size_() == 1 && elem_end_end_ != elem_end_last_)) {
+                reserve_back_(2);
+                emplace_back_noalloc_(::std::forward<Args>(args)...);
+
+                auto new_pos = begin() + static_cast<::std::ptrdiff_t>(front_diff);
+                back_emplace_(new_pos.block_elem_curr_, new_pos.elem_curr_);
+                *new_pos = ::std::move(back());
+                pop_back();
+                return new_pos;
+            } else {
+                reserve_front_(2);
+                emplace_front_noalloc_(::std::forward<Args>(args)...);
+                auto new_pos = end() - static_cast<::std::ptrdiff_t>(back_diff);
+                front_emplace_(new_pos.block_elem_curr_, new_pos.elem_curr_);
+                *(--new_pos) = ::std::move(front());
+                pop_front();
+                return new_pos;
+            }
+        }
+
+        constexpr iterator insert(const_iterator const pos, T const &value) {
+            return emplace(pos, value);
+        }
+
+        constexpr iterator insert(const_iterator const pos, T &&value) {
+            return emplace(pos, ::std::move(value));
+        }
+
+        template<::std::ranges::input_range R>
+            requires ::std::convertible_to<::std::ranges::range_value_t<R>, T>
+        constexpr iterator insert_range(const_iterator const pos, R &&rg) {
+            if (::std::ranges::empty(rg)) {
+                return pos.remove_const_();
+            }
+            auto const begin_pre = begin();
+            auto const end_pre = end();
+            if (pos == end_pre) {
+                auto const old_size = size();
+                append_range_noguard_(::std::forward<R>(rg));
+                return begin() + old_size;
+            }
+            if (pos == begin_pre) {
+                prepend_range_noguard_(::std::forward<R>(rg));
+                return begin();
+            }
+            auto const back_diff = end_pre - pos;
+            auto const front_diff = pos - begin_pre;
+
+            if (back_diff <= front_diff) {
+                auto const old_size = size();
+                append_range_noguard_(::std::forward<R>(rg));
+                ::std::ranges::rotate(begin() + front_diff, begin() + old_size, end());
+                return begin() + front_diff;
+            } else {
+                auto const old_size = size();
+                prepend_range_noguard_(::std::forward<R>(rg));
+                auto const count = size() - old_size;
+                ::std::ranges::rotate(begin(), begin() + count, begin() + (count + front_diff));
+                return begin() + front_diff;
+            }
+        }
+
+
+        template<::std::input_iterator U, typename V>
+        constexpr iterator insert(const_iterator const pos, U first, V last) {
+            if (first == last) {
+                return pos.remove_const_();
+            }
+            auto const begin_pre = begin();
+            auto const end_pre = end();
+            if (pos == end_pre) {
+                auto const old_size = size();
+                append_range_noguard_(::std::forward<U>(first), ::std::forward<V>(last));
+                return begin() + old_size;
+            }
+            if (pos == begin_pre) {
+                prepend_range_noguard_(::std::forward<U>(first), ::std::forward<V>(last));
+                return begin();
+            }
+            auto const back_diff = end_pre - pos;
+            auto const front_diff = pos - begin_pre;
+            if (back_diff <= front_diff) {
+                auto const old_size = size();
+                append_range_noguard_(::std::forward<U>(first), ::std::forward<V>(last));
+                ::std::ranges::rotate(begin() + front_diff, begin() + old_size, end());
+                return begin() + front_diff;
+            } else {
+                auto const old_size = size();
+                prepend_range_noguard_(::std::forward<U>(first), ::std::forward<V>(last));
+                auto const count = size() - old_size;
+                ::std::ranges::rotate(begin(), begin() + count, begin() + (count + front_diff));
+                return begin() + front_diff;
+            }
+        }
+
+        constexpr iterator insert(const_iterator const pos, ::std::initializer_list<T> const ilist) {
+            return insert(pos, ilist.begin(), ilist.end());
+        }
+
+        constexpr iterator insert(const_iterator const pos, ::std::size_t const count, T const &value) {
+#if defined(__cpp_lib_ranges_repeat) && __cpp_lib_ranges_repeat >= 202207L && (!defined(__GNUC__) || __GNUC__ >= 15)
+            return insert_range(pos, ::std::ranges::views::repeat(value, count));
+#else
+            auto iota_v = ::std::ranges::iota_view(static_cast<::std::size_t>(0), count);
+            auto transform_func = [&](auto) -> T const & { return value; };
+            auto repeat_view = ::std::ranges::transform_view(iota_v, transform_func);
+            return insert_range(pos, repeat_view);
+#endif
+        }
+
+        constexpr iterator erase(const_iterator const pos) {
+            auto const begin_pre = begin();
+            auto const end_pre = end();
+            if (pos == begin_pre) {
+                pop_front();
+                return begin();
+            }
+            if (pos + 1 == end_pre) {
+                pop_back();
+                return end();
+            }
+            auto const back_diff = end_pre - pos;
+            auto const front_diff = pos - begin_pre;
+            if (back_diff <= front_diff) {
+                ::std::ranges::move((pos + 1).remove_const_(), end(), pos.remove_const_());
+                pop_back();
+                return begin() + front_diff;
+            } else {
+                ::std::ranges::move_backward(begin(), pos.remove_const_(), (pos + 1).remove_const_());
+                pop_front();
+                return begin() + front_diff;
+            }
+        }
+
+        constexpr iterator erase(const_iterator const first, const_iterator const last) {
+            auto const begin_pre = begin();
+            auto const end_pre = end();
+            if (first == begin_pre) {
+                pop_front_n_(last - first);
+                return begin();
+            }
+            if (last == end_pre) {
+                pop_back_n_(last - first);
+                return end();
+            }
+            auto const back_diff = end_pre - last;
+            auto const front_diff = first - begin_pre;
+            if (back_diff <= front_diff) {
+                ::std::ranges::move(last, end(), first.remove_const_());
+                pop_back_n_(last - first);
+                return begin() + front_diff;
+            } else {
+                ::std::ranges::move_backward(begin(), first.remove_const_(), last.remove_const_());
+                pop_front_n_(last - first);
+                return begin() + front_diff;
+            }
         }
 
     private:
@@ -751,6 +1253,7 @@ namespace fast_io::containers {
                 ++block_alloc_end_;
             }
         }
+
         constexpr void reallocate_control_block_for_back_expansion_(::std::size_t add_block_size) {
             ctrl_alloc_ const ctrl{*this, block_alloc_size_() + add_block_size}; // may throw
             ctrl.replace_ctrl_back();
@@ -792,8 +1295,7 @@ namespace fast_io::containers {
             if (ctrl_cap >= add_elem_size) {
                 align_elem_alloc_as_ctrl_back_(block_ctrl_begin_());
                 extent_block_back_uncond_(add_block_size);
-            }
-            else [[unlikely]] {
+            } else [[unlikely]] {
                 reallocate_control_block_for_back_expansion_(add_block_size);
             }
             extent_block_back_uncond_(add_block_size);
@@ -876,8 +1378,7 @@ namespace fast_io::containers {
             extent_block_front_uncond_(1);
         }
 
-        struct construct_guard_ {
-        private:
+        class construct_guard_ {
             deque *d;
 
         public:
@@ -919,22 +1420,6 @@ namespace fast_io::containers {
             }
         }
 
-    public:
-        constexpr deque() noexcept(::std::is_nothrow_default_constructible_v<allocator>)
-            requires ::std::default_initializable<allocator>
-        = default;
-
-        explicit constexpr deque(allocator const & /*alloc*/) noexcept
-            requires ::std::default_initializable<allocator> {
-        }
-
-        constexpr deque(deque const &other, allocator const & /*alloc*/) : deque(other) {
-        }
-
-        constexpr deque(deque &&other, allocator const & /*alloc*/) noexcept : deque(::std::move(other)) {
-        }
-
-    private:
         template<typename... Ts>
         constexpr void construct_(::std::size_t const full_blocks, ::std::size_t const rem_elems, Ts &&... ts) {
             if (full_blocks) {
@@ -1096,35 +1581,6 @@ namespace fast_io::containers {
             return *begin;
         }
 
-    public:
-        template<typename... V>
-        constexpr T &emplace_back(V &&... v) {
-            auto const block_size = block_elem_size_();
-            if (elem_end_end_ != elem_end_last_) {
-                return emplace_back_pre_(block_size, ::std::forward<V>(v)...);
-            } else {
-                reserve_one_back_();
-                return emplace_back_post_(block_size, ::std::forward<V>(v)...);
-            }
-        }
-
-        explicit constexpr deque(::std::size_t const count) {
-            auto const [block_size, full_blocks, rem_elems] = details::calc_cap<T>(count);
-            construct_guard_ guard(this);
-            extent_block_(block_size);
-            construct_(full_blocks, rem_elems);
-            guard.release();
-        }
-
-        constexpr deque(::std::size_t const count, T const &t) {
-            auto const [block_size, full_blocks, rem_elems] = details::calc_cap<T>(count);
-            construct_guard_ guard(this);
-            extent_block_(block_size);
-            construct_(full_blocks, rem_elems, t);
-            guard.release();
-        }
-
-    private:
         template<::std::input_iterator U, typename V>
         constexpr void from_range_noguard_(U &&first, V &&last) {
             for (; first != last; ++first) {
@@ -1175,107 +1631,6 @@ namespace fast_io::containers {
             }
         }
 
-    public:
-        template<::std::input_iterator U, typename V>
-        constexpr deque(U first, V last) {
-            construct_guard_ guard(this);
-            from_range_noguard_(::std::move(first), ::std::move(last));
-            guard.release();
-        }
-#if (defined(__cpp_lib_from_range) && __cpp_lib_from_range >= 202207L) || __cplusplus > 202002L
-        template<::std::ranges::input_range R>
-            requires ::std::convertible_to<::std::ranges::range_value_t<R>, T>
-        constexpr deque(::std::from_range_t, R &&rg) {
-            construct_guard_ guard(this);
-            from_range_noguard_(rg);
-            guard.release();
-        }
-#endif
-
-
-        constexpr deque(deque const &other) {
-            if (!other.empty()) {
-                construct_guard_ guard(this);
-                from_range_noguard_(other.begin(), other.end());
-                guard.release();
-            }
-        }
-
-        constexpr deque(deque &&other) noexcept {
-            other.swap(*this);
-        }
-
-        explicit constexpr deque(::std::initializer_list<T> const ilist) {
-            if (ilist.size()) {
-                construct_guard_ guard(this);
-                from_range_noguard_(ilist.begin(), ilist.end());
-                guard.release();
-            }
-        }
-
-        constexpr deque &operator=(const deque &other) {
-            if (this != ::std::addressof(other)) {
-                assign(other.begin(), other.end());
-            }
-            return *this;
-        }
-
-        constexpr deque &operator=(::std::initializer_list<T> ilist) {
-            clear();
-            if (ilist.size()) {
-                auto const [block_size, full_blocks, rem_elems] = details::calc_cap<T>(ilist.size());
-                extent_block_(block_size);
-                construct_(full_blocks, rem_elems, ::std::ranges::begin(ilist), ::std::ranges::end(ilist));
-            }
-            return *this;
-        }
-
-        constexpr deque &operator=(deque &&other) noexcept {
-            if (this == &other) {
-                return *this;
-            }
-            other.swap(*this);
-            return *this;
-        }
-
-        constexpr void assign_range(deque &&d) {
-            *this = ::std::move(d);
-        }
-
-        constexpr void assign_range(deque const &d) {
-            *this = d;
-        }
-
-        template<::std::ranges::input_range R>
-            requires ::std::convertible_to<::std::ranges::range_value_t<R>, T>
-        constexpr void assign_range(R &&rg) {
-            clear();
-            from_range_noguard_(::std::forward<R>(rg));
-        }
-
-        constexpr void assign(::std::size_t const count, T const &value) {
-            clear();
-            if (count) {
-                auto const [block_size, full_blocks, rem_elems] = details::calc_cap<T>(count);
-                extent_block_(block_size);
-                construct_(full_blocks, rem_elems, value);
-            }
-            /*
-            assign_range(::std::ranges::views::repeat(value, count));
-            */
-        }
-
-        template<::std::input_iterator U, typename V>
-        constexpr void assign(U first, V last) {
-            clear();
-            from_range_noguard_(::std::move(first), ::std::move(last));
-        }
-
-        constexpr void assign(::std::initializer_list<T> const ilist) {
-            clear();
-            from_range_noguard_(ilist.begin(), ilist.end());
-        }
-    private:
         template<typename... V>
 #if __has_cpp_attribute(__gnu__::__always_inline__)
 [[__gnu__::__always_inline__]]
@@ -1314,167 +1669,6 @@ namespace fast_io::containers {
             return *(end - 1);
         }
 
-    public:
-        template<typename... V>
-        constexpr T &emplace_front(V &&... v) {
-            auto const block_size = block_elem_size_();
-            if (elem_begin_begin_ != elem_begin_first_) {
-                return emplace_front_pre_(block_size, ::std::forward<V>(v)...);
-            } else {
-                reserve_one_front_();
-                return emplace_front_post_(block_size, ::std::forward<V>(v)...);
-            }
-        }
-#if __has_cpp_attribute(__gnu__::__always_inline__)
-        [[__gnu__::__always_inline__]]
-#elif __has_cpp_attribute(msvc::forceinline)
-        [[msvc::forceinline]]
-#endif
-        constexpr T &operator[](::std::size_t const pos) noexcept {
-            auto const front_size = static_cast<::std::size_t>(elem_begin_begin_ - elem_begin_first_);
-            auto const [block_step, elem_step] = details::calc_pos<T>(front_size, pos);
-            auto const target_block = block_elem_begin_ + block_step;
-            auto const check_block = target_block < block_elem_end_;
-            auto const check_elem = (target_block + 1 == block_elem_end_)
-                                        ? (::std::to_address(*target_block) + elem_step < elem_end_end_)
-                                        : true;
-
-            if (!(check_block && check_elem)) [[unlikely]] {
-                fast_terminate();
-            }
-
-            return *((*target_block) + elem_step);
-        }
-#if __has_cpp_attribute(__gnu__::__always_inline__)
-        [[__gnu__::__always_inline__]]
-#elif __has_cpp_attribute(msvc::forceinline)
-        [[msvc::forceinline]]
-#endif
-        constexpr T const &operator[](::std::size_t const pos) const noexcept {
-            auto const front_size = static_cast<::std::size_t>(elem_begin_begin_ - elem_begin_first_);
-            auto const [block_step, elem_step] = details::calc_pos<T>(front_size, pos);
-            auto const target_block = block_elem_begin_ + block_step;
-            auto const check_block = target_block < block_elem_end_;
-            auto const check_elem = (target_block + 1 == block_elem_end_)
-                                        ? (::std::to_address(*target_block) + elem_step < elem_end_end_)
-                                        : true;
-
-            if (!(check_block && check_elem)) [[unlikely]] {
-                fast_terminate();
-            }
-
-            return *((*target_block) + elem_step);
-        }
-
-        constexpr void shrink_to_fit() noexcept {
-            if (block_alloc_size_() != 0) {
-                for (auto const i: ::std::ranges::subrange{block_alloc_begin_, block_elem_begin_}) {
-                    dealloc_block_(i);
-                }
-                block_alloc_begin_ = block_elem_begin_;
-                for (auto const i: ::std::ranges::subrange{block_elem_end_, block_alloc_end_}) {
-                    dealloc_block_(i);
-                }
-                block_alloc_end_ = block_elem_end_;
-            }
-        }
-
-        constexpr void push_back(T const &t) {
-            emplace_back(t);
-        }
-
-        constexpr void push_back(T &&t) {
-            emplace_back(::std::move(t));
-        }
-
-        constexpr void push_front(T const &value) {
-            emplace_front(value);
-        }
-
-        constexpr void push_front(T &&value) {
-            emplace_front(::std::move(value));
-        }
-
-
-        constexpr void pop_back() noexcept {
-            if (empty()) [[unlikely]] {
-                fast_terminate();
-            }
-            --elem_end_end_;
-            ::std::destroy_at(elem_end_begin_);
-            if (elem_end_end_ == elem_end_begin_) {
-                --block_elem_end_;
-                auto const block_size = block_elem_size_();
-                if (block_size == 1) {
-                    elem_end_(elem_begin_begin_, elem_begin_end_, elem_begin_end_);
-                } else if (block_size) {
-                    auto const begin = *(block_elem_end_ - 1);
-                    auto const last = begin + details::block_elements_v<T>;
-                    elem_end_(begin, last, last);
-                } else {
-                    elem_begin_(nullptr, nullptr, nullptr);
-                    elem_end_(nullptr, nullptr, nullptr);
-                }
-            } else if (block_elem_size_() == 1) {
-                --elem_begin_end_;
-            }
-        }
-
-
-        constexpr void pop_front() noexcept {
-            if (empty()) [[unlikely]] {
-                fast_terminate();
-            }
-            ::std::destroy_at(elem_begin_begin_);
-            ++elem_begin_begin_;
-            if (elem_begin_end_ == elem_begin_begin_) {
-                ++block_elem_begin_;
-                auto const block_size = block_elem_size_();
-
-                if (block_size == 1) {
-                    elem_begin_(elem_end_begin_, elem_end_end_, elem_end_begin_);
-                } else if (block_size) {
-                    auto const begin = *block_elem_begin_;
-                    auto const last = begin + details::block_elements_v<T>;
-                    elem_begin_(begin, last, begin);
-                } else {
-                    elem_begin_(nullptr, nullptr, nullptr);
-                    elem_end_(nullptr, nullptr, nullptr);
-                }
-            } else if (block_elem_size_() == 1) {
-                ++elem_end_begin_;
-            }
-        }
-
-        constexpr T &front() noexcept {
-            if (empty()) [[unlikely]] {
-                fast_terminate();
-            }
-            return *(elem_begin_begin_);
-        }
-
-        constexpr T &back() noexcept {
-            if (empty()) [[unlikely]] {
-                fast_terminate();
-            }
-            return *(elem_end_end_ - 1);
-        }
-
-        constexpr T const &front() const noexcept {
-            if (empty()) [[unlikely]] {
-                fast_terminate();
-            }
-            return *(elem_begin_begin_);
-        }
-
-        constexpr T const &back() const noexcept {
-            if (empty()) [[unlikely]] {
-                fast_terminate();
-            }
-            return *(elem_end_end_ - 1);
-        }
-
-    private:
         constexpr void pop_back_n_(::std::size_t const count) noexcept {
             for (auto i = 0; i != count; ++i) {
                 if (empty()) [[unlikely]] {
@@ -1494,7 +1688,7 @@ namespace fast_io::containers {
         }
 
         template<bool back>
-        struct partial_guard_ {
+        class partial_guard_ {
             deque *d;
             ::std::size_t const size;
 
@@ -1647,25 +1841,6 @@ namespace fast_io::containers {
             }
         }
 
-    public:
-        template<::std::ranges::input_range R>
-            requires ::std::convertible_to<::std::ranges::range_value_t<R>, T>
-        constexpr void append_range(R &&rg) {
-            partial_guard_<true> guard(this, size());
-            append_range_noguard_(::std::forward<R>(rg));
-            guard.release();
-        }
-
-        template<::std::ranges::input_range R>
-            requires ::std::convertible_to<::std::ranges::range_value_t<R>, T>
-        constexpr void prepend_range(R &&rg) {
-            auto const old_size = size();
-            partial_guard_<false> guard(this, old_size);
-            prepend_range_noguard_(::std::forward<R>(rg));
-            guard.release();
-        }
-
-    private:
         constexpr void resize_shrink_(::std::size_t const old_size, ::std::size_t const new_size) noexcept {
             if (old_size < new_size) [[unlikely]] {
                 fast_terminate();
@@ -1711,16 +1886,6 @@ namespace fast_io::containers {
             }
         }
 
-    public:
-        constexpr void resize(::std::size_t const new_size) {
-            new_size == 0 ? clear() : resize_unified_(new_size);
-        }
-
-        constexpr void resize(::std::size_t const new_size, T const &t) {
-            new_size == 0 ? clear() : resize_unified_(new_size, t);
-        }
-
-    private:
         constexpr void back_emplace_(Block *const block_curr, T *const elem_curr) {
             auto const block_end = block_elem_end_;
             auto const block_size = static_cast<::std::size_t>(block_end - block_curr) - 1;
@@ -1781,54 +1946,6 @@ namespace fast_io::containers {
             }
         }
 
-    public:
-        template<typename... Args>
-        constexpr iterator emplace(const_iterator const pos, Args &&... args) {
-            auto const begin_pre = begin();
-            auto const end_pre = end();
-            if (pos == end_pre) {
-                emplace_back(::std::forward<Args>(args)...);
-                return end() - 1;
-            }
-            if (pos == begin_pre) {
-                emplace_front(::std::forward<Args>(args)...);
-                return begin();
-            }
-
-            auto const back_diff = static_cast<::std::size_t>(end_pre - pos);
-            auto const front_diff = static_cast<::std::size_t>(pos - begin_pre);
-            // NB:
-
-
-            if (back_diff <= front_diff || (block_elem_size_() == 1 && elem_end_end_ != elem_end_last_)) {
-                reserve_back_(2);
-                emplace_back_noalloc_(::std::forward<Args>(args)...);
-
-                auto new_pos = begin() + static_cast<::std::ptrdiff_t>(front_diff);
-                back_emplace_(new_pos.block_elem_curr_, new_pos.elem_curr_);
-                *new_pos = ::std::move(back());
-                pop_back();
-                return new_pos;
-            } else {
-                reserve_front_(2);
-                emplace_front_noalloc_(::std::forward<Args>(args)...);
-                auto new_pos = end() - static_cast<::std::ptrdiff_t>(back_diff);
-                front_emplace_(new_pos.block_elem_curr_, new_pos.elem_curr_);
-                *(--new_pos) = ::std::move(front());
-                pop_front();
-                return new_pos;
-            }
-        }
-
-        constexpr iterator insert(const_iterator const pos, T const &value) {
-            return emplace(pos, value);
-        }
-
-        constexpr iterator insert(const_iterator const pos, T &&value) {
-            return emplace(pos, ::std::move(value));
-        }
-
-    private:
         static inline constexpr auto synth_three_way_ = []<class U, class V>(const U &u, const V &v) {
             if constexpr (::std::three_way_comparable_with<U, V>) {
                 return u <=> v;
@@ -1840,137 +1957,6 @@ namespace fast_io::containers {
                 return ::std::weak_ordering::equivalent;
             }
         };
-
-    public:
-        template<::std::ranges::input_range R>
-            requires ::std::convertible_to<::std::ranges::range_value_t<R>, T>
-        constexpr iterator insert_range(const_iterator const pos, R &&rg) {
-            if (::std::ranges::empty(rg)) {
-                return pos.remove_const_();
-            }
-            auto const begin_pre = begin();
-            auto const end_pre = end();
-            if (pos == end_pre) {
-                auto const old_size = size();
-                append_range_noguard_(::std::forward<R>(rg));
-                return begin() + old_size;
-            }
-            if (pos == begin_pre) {
-                prepend_range_noguard_(::std::forward<R>(rg));
-                return begin();
-            }
-            auto const back_diff = end_pre - pos;
-            auto const front_diff = pos - begin_pre;
-
-            if (back_diff <= front_diff) {
-                auto const old_size = size();
-                append_range_noguard_(::std::forward<R>(rg));
-                ::std::ranges::rotate(begin() + front_diff, begin() + old_size, end());
-                return begin() + front_diff;
-            } else {
-                auto const old_size = size();
-                prepend_range_noguard_(::std::forward<R>(rg));
-                auto const count = size() - old_size;
-                ::std::ranges::rotate(begin(), begin() + count, begin() + (count + front_diff));
-                return begin() + front_diff;
-            }
-        }
-
-
-        template<::std::input_iterator U, typename V>
-        constexpr iterator insert(const_iterator const pos, U first, V last) {
-            if (first == last) {
-                return pos.remove_const_();
-            }
-            auto const begin_pre = begin();
-            auto const end_pre = end();
-            if (pos == end_pre) {
-                auto const old_size = size();
-                append_range_noguard_(::std::forward<U>(first), ::std::forward<V>(last));
-                return begin() + old_size;
-            }
-            if (pos == begin_pre) {
-                prepend_range_noguard_(::std::forward<U>(first), ::std::forward<V>(last));
-                return begin();
-            }
-            auto const back_diff = end_pre - pos;
-            auto const front_diff = pos - begin_pre;
-            if (back_diff <= front_diff) {
-                auto const old_size = size();
-                append_range_noguard_(::std::forward<U>(first), ::std::forward<V>(last));
-                ::std::ranges::rotate(begin() + front_diff, begin() + old_size, end());
-                return begin() + front_diff;
-            } else {
-                auto const old_size = size();
-                prepend_range_noguard_(::std::forward<U>(first), ::std::forward<V>(last));
-                auto const count = size() - old_size;
-                ::std::ranges::rotate(begin(), begin() + count, begin() + (count + front_diff));
-                return begin() + front_diff;
-            }
-        }
-
-        constexpr iterator insert(const_iterator const pos, ::std::initializer_list<T> const ilist) {
-            return insert(pos, ilist.begin(), ilist.end());
-        }
-
-        constexpr iterator insert(const_iterator const pos, ::std::size_t const count, T const &value) {
-#if defined(__cpp_lib_ranges_repeat) && __cpp_lib_ranges_repeat >= 202207L && (!defined(__GNUC__) || __GNUC__ >= 15)
-            return insert_range(pos, ::std::ranges::views::repeat(value, count));
-#else
-            auto iota_v = ::std::ranges::iota_view(static_cast<::std::size_t>(0), count);
-            auto transform_func = [&](auto) -> T const & { return value; };
-            auto repeat_view = ::std::ranges::transform_view(iota_v, transform_func);
-            return insert_range(pos, repeat_view);
-#endif
-        }
-
-        constexpr iterator erase(const_iterator const pos) {
-            auto const begin_pre = begin();
-            auto const end_pre = end();
-            if (pos == begin_pre) {
-                pop_front();
-                return begin();
-            }
-            if (pos + 1 == end_pre) {
-                pop_back();
-                return end();
-            }
-            auto const back_diff = end_pre - pos;
-            auto const front_diff = pos - begin_pre;
-            if (back_diff <= front_diff) {
-                ::std::ranges::move((pos + 1).remove_const_(), end(), pos.remove_const_());
-                pop_back();
-                return begin() + front_diff;
-            } else {
-                ::std::ranges::move_backward(begin(), pos.remove_const_(), (pos + 1).remove_const_());
-                pop_front();
-                return begin() + front_diff;
-            }
-        }
-
-        constexpr iterator erase(const_iterator const first, const_iterator const last) {
-            auto const begin_pre = begin();
-            auto const end_pre = end();
-            if (first == begin_pre) {
-                pop_front_n_(last - first);
-                return begin();
-            }
-            if (last == end_pre) {
-                pop_back_n_(last - first);
-                return end();
-            }
-            auto const back_diff = end_pre - last;
-            auto const front_diff = first - begin_pre;
-            if (back_diff <= front_diff) {
-                ::std::ranges::move(last, end(), first.remove_const_());
-                pop_back_n_(last - first);
-                return begin() + front_diff;
-            } else {
-                ::std::ranges::move_backward(begin(), first.remove_const_(), last.remove_const_());
-                pop_front_n_(last - first);
-                return begin() + front_diff;
-            }
-        }
     };
 
     template<::std::movable T, typename allocator1, typename allocator2>
