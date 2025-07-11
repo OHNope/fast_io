@@ -752,11 +752,9 @@ namespace fast_io::containers {
             }
         }
         constexpr void reallocate_control_block_for_back_expansion_(::std::size_t add_block_size) {
-            // 这里的逻辑就是原来 else 块里的内容
             ctrl_alloc_ const ctrl{*this, block_alloc_size_() + add_block_size}; // may throw
             ctrl.replace_ctrl_back();
 
-            // 别忘了，重分配后还需要扩展新的数据块
             extent_block_back_uncond_(add_block_size);
         }
 
@@ -919,10 +917,6 @@ namespace fast_io::containers {
                 }
                 extent_block_back_uncond_(new_block_size - alloc_block_size); // may throw
             }
-        }
-
-        static consteval void is_iterator_(iterator const &) noexcept {
-            /* */
         }
 
     public:
